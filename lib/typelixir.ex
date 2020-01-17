@@ -1,18 +1,7 @@
 defmodule Typelixir do
-  @moduledoc """
-  Documentation for Typelixir.
-  """
+  @moduledoc false
 
-  @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> Typelixir.hello()
-      :world
-
-  """
-  def hello do
-    :world
+  def check(file) do
+    IO.inspect Code.string_to_quoted([], file: file)
   end
 end
