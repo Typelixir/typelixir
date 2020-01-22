@@ -1,7 +1,7 @@
 defmodule Typelixir do
   @moduledoc false
 
-  def check(file) do
-    IO.inspect Code.string_to_quoted([], file: file)
+  def check(all_paths) do
+    ModuleNamesExtractor.extract_modules_names(all_paths)
   end
 end
