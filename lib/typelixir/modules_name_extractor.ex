@@ -1,4 +1,5 @@
 defmodule ModuleNamesExtractor do
+  @moduledoc false
 
   def extract_modules_names(all_paths) do
     modules_paths = for path <- all_paths,
