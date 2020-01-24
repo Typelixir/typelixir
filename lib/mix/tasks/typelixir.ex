@@ -11,9 +11,7 @@ defmodule Mix.Tasks.Typelixir do
   end
 
   defp get_paths() do
-    project = Mix.Project.config()
-    srcs = project[:elixirc_paths]
-    paths = Mix.Utils.extract_files(srcs, [:ex])
+    paths = Mix.Project.config()[:elixirc_paths] |> Mix.Utils.extract_files([:ex])
 
     IO.puts "\nTypelixir -> Compiling #{length(paths)} #{if (length(paths) > 1), do: "files", else: "file"} (.ex)\n"
     paths
