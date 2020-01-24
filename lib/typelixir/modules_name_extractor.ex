@@ -10,6 +10,7 @@ defmodule ModuleNamesExtractor do
         do: {module, path}
     modules_paths = Enum.into(Enum.concat(modules_paths), %{})
     IO.puts(["Modules map => ", inspect modules_paths])
+    modules_paths
   end
 
   defp extract_module_names_file(path) do
