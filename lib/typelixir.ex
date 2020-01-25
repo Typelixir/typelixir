@@ -33,6 +33,11 @@ defmodule Typelixir do
       modules_functions: modules_functions
     }
     result = Processor.process_file(path, env)
+    
+    # while developing to see the info in the console
+    IO.puts "#{path} env:"
+    IO.inspect result
+    
     {"#{path}", result[:state], result[:data], result[:modules_functions]}
   end
 
