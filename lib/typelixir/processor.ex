@@ -34,7 +34,7 @@ defmodule Processor do
       type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type) end)
       type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)
       
-      if (TypeComparator.less_or_equal(type_of_args_caller, type_of_args_callee)), do: {elem, env},
+      if (TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee)), do: {elem, env},
         else: {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
     else 
       {elem, env}
@@ -67,6 +67,30 @@ defmodule Processor do
     modules_functions = Map.put(env[:modules_functions], env[:module_name], new_module_map)
     
     {elem, %{env | modules_functions: modules_functions}}
+  end
+
+  # VARIABLES
+  # ---------------------------------------------------------------------------------------------------
+  
+  defp process({type, [_], [{variable, _, _}]} = elem, env) when (type in [:string, :boolean, :integer, :float, :atom]) do
+    vars = Map.put(env[:vars], variable, type)
+    {elem, %{env | vars: vars}}
+  end
+
+  defp process({:list, [_], [{variable, _, _}, type]} = elem, env) do
+    vars = Map.put(env[:vars], variable, {:list, TypeBuilder.build(type)})
+    {elem, %{env | vars: vars}}
+  end
+
+  defp process({:tuple, [_], [{variable, _, _}, types_list]} = elem, env) do
+    tuple_type = Enum.map(types_list, fn type -> TypeBuilder.build(type) end)
+    vars = Map.put(env[:vars], variable, {:tuple, tuple_type})
+    {elem, %{env | vars: vars}}
+  end
+
+  defp process({:map, [_], [{variable, _, _}, key_type, value_type]} = elem, env) do
+    vars = Map.put(env[:vars], variable, {:map, {TypeBuilder.build(key_type), TypeBuilder.build(value_type)}})
+    {elem, %{env | vars: vars}}
   end
 
   # BASE CASES

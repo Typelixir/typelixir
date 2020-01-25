@@ -29,7 +29,6 @@ defmodule Typelixir do
       data: [],
       module_name: :empty,
       vars: %{},
-      funcs: %{},
       modules_functions: modules_functions
     }
     result = Processor.process_file(path, env)
