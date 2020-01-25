@@ -25,6 +25,22 @@ defmodule Processor do
     {elem, %{env | modules_functions: modules_functions}}
   end
 
+  # MODULES INTERACTION
+  # ---------------------------------------------------------------------------------------------------
+
+  # {{:., _, [{:__aliases__, _, [module_name]}, fn_name]}, _, args}
+  defp process({{:., [line: line], [{:__aliases__, _, [mod_name]}, fn_name]}, _, args} = elem, env) do
+    if (env[:modules_functions][mod_name][fn_name]) do
+      type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type) end)
+      type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)
+      
+      if (TypeComparator.less_or_equal(type_of_args_caller, type_of_args_callee)), do: {elem, env},
+        else: {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
+    else 
+      {elem, env}
+    end
+  end
+
   # USE, IMPORT, ALIAS, REQUIRE
   # ---------------------------------------------------------------------------------------------------
 
@@ -38,8 +54,8 @@ defmodule Processor do
     end
   end
 
-  # # FUNCTIONS
-  # # ---------------------------------------------------------------------------------------------------
+  # FUNCTIONS
+  # ---------------------------------------------------------------------------------------------------
 
   # {:@, _, [{:spec, _, [{:::, _, [{fn_name, _, [type_of_args]}, type_of_return]}]}]}
   # {:functype, _, [{fn_name, _, _}, args, type_of_return]}
