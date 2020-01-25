@@ -1,23 +1,13 @@
 defmodule TypeBuilder do
-  def build({:list, _, [type]}) do
-    {:list, build(type)}
-  end
+  def build({:list, _, [type]}), do: {:list, build(type)}
 
-  def build({:tuple, _, [types_list]}) do
-    {:tuple, Enum.map(types_list, fn type -> build(type) end)}
-  end
+  def build({:tuple, _, [types_list]}), do: {:tuple, Enum.map(types_list, fn type -> build(type) end)}
 
-  def build({:map, _, [key_type, value_type]}) do
-    {:map, {build(key_type), build(value_type)}}
-  end
+  def build({:map, _, [key_type, value_type]}), do: {:map, {build(key_type), build(value_type)}}
 
-  def build({:_, _, _}) do
-    nil
-  end
+  def build({:_, _, _}), do: nil
 
-  def build({type, _, _}) when (type in [:string, :boolean, :integer, :float, :atom]) do
-    type
-  end
+  def build({type, _, _}) when (type in [:string, :boolean, :integer, :float, :atom]), do: type
 
   # Literal Map
   def build({:%{}, _, list}) do

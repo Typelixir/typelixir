@@ -9,7 +9,10 @@ defmodule ModuleNamesExtractor do
         into: [],
         do: {module, path}
     modules_paths = Enum.into(Enum.concat(modules_paths), %{})
+
+    # while developing to see the info in the console
     IO.puts(["Modules map => ", inspect modules_paths])
+
     modules_paths
   end
 
@@ -19,9 +22,7 @@ defmodule ModuleNamesExtractor do
     result
   end
 
-  defp extract({:defmodule, _, [{:__aliases__, _, [module_name]}, _]} = elem, names) do
-    {elem, names ++ [module_name]}
-  end
+  defp extract({:defmodule, _, [{:__aliases__, _, [module_name]}, _]} = elem, names), do: {elem, names ++ [module_name]}
 
   defp extract(elem, acc), do: {elem, acc}
   end
