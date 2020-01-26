@@ -1,6 +1,8 @@
 defmodule Typelixir do
   @moduledoc false
 
+  alias Typelixir.{ModuleNamesExtractor, Processor}
+
   def check(all_paths) do
     modules_paths = ModuleNamesExtractor.extract_modules_names(all_paths)
     states = compile_files(all_paths, [], modules_paths, Map.new())

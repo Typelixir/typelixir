@@ -1,4 +1,7 @@
-defmodule TypeBuilder do
+defmodule Typelixir.TypeBuilder do
+
+  alias Typelixir.TypeComparator
+
   def build({:list, _, [type]}, vars), do: {:list, build(type, vars)}
 
   def build({:tuple, _, [types_list]}, vars), do: {:tuple, Enum.map(types_list, fn type -> build(type, vars) end)}

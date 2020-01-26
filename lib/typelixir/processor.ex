@@ -1,5 +1,7 @@
-defmodule Processor do
+defmodule Typelixir.Processor do
   @moduledoc false
+
+  alias Typelixir.{TypeBuilder, TypeComparator}
 
   # FIRST
   # ---------------------------------------------------------------------------------------------------
@@ -19,7 +21,7 @@ defmodule Processor do
   # ---------------------------------------------------------------------------------------------------
 
   # {:defmodule, _, MODULE}
-  defp process({:defmodule, _, [{:__aliases__, _, [module_name]} | [[tail]]]} = elem, env) do
+  defp process({:defmodule, _, [{:__aliases__, _, [module_name]} | [[_tail]]]} = elem, env) do
     env = %{env | module_name: module_name}
     modules_functions = Map.put(env[:modules_functions], env[:module_name], Map.new())
     {elem, %{env | modules_functions: modules_functions}}
