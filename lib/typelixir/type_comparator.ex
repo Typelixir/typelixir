@@ -44,5 +44,9 @@ defmodule Typelixir.TypeComparator do
   
   def greater(:float, :integer), do: :float
 
+  def greater(nil, type), do: type
+
+  def greater(type, nil), do: type
+
   def greater(_, _), do: nil
 end

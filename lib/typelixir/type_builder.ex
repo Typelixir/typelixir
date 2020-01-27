@@ -33,7 +33,8 @@ defmodule Typelixir.TypeBuilder do
   def build([], _vars), do: {:list, nil}
 
   def build(value, vars) when is_list(value) do
-    {:list, Enum.map(value, fn t -> build(t, vars) end) |> Enum.reduce(fn acc, e -> TypeComparator.greater(acc, e) end)}
+    {:list, Enum.map(value, fn t -> build(t, vars) end) |> Enum.reduce(fn acc, e -> 
+      if e === nil, do: e, else: TypeComparator.greater(acc, e) end)}
   end
 
   # Literal Tuple 2 Elems
