@@ -16,6 +16,8 @@ defmodule Typelixir.TypeBuilder do
   def build({:{}, _, list}, vars), do: {:tuple, Enum.map(list, fn t -> build(t, vars) end)}
 
   # Literal Map
+  def build({:%{}, _, []}, vars), do: {:map, {nil, nil}}
+
   def build({:%{}, _, list}, vars) do
     {:map,
       Enum.map(list, fn {key, elem} -> {build(key, vars), build(elem, vars)} end)
