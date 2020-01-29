@@ -1,4 +1,4 @@
-defmodule TypeComparator do
+defmodule Typelixir.TypeComparator do
   def less_or_equal?(type1, type2) when type1 === type2, do: true
   
   def less_or_equal?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
@@ -43,6 +43,10 @@ defmodule TypeComparator do
   def greater(:integer, :float), do: :float
   
   def greater(:float, :integer), do: :float
+
+  def greater(nil, type), do: type
+
+  def greater(type, nil), do: type
 
   def greater(_, _), do: nil
 end

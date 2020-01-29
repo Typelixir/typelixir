@@ -1,10 +1,16 @@
 defmodule Typelixir do
   @moduledoc false
 
+  alias Typelixir.{ModuleNamesExtractor, Processor}
+
   def check(all_paths) do
     modules_paths = ModuleNamesExtractor.extract_modules_names(all_paths)
     states = compile_files(all_paths, [], modules_paths, Map.new())
     Enum.each(states, fn state -> print_state(state) end)
+    case Enum.filter(states, fn {_, status, _} -> status == :error end) do
+      [] -> :ok
+      errors -> {:error, Enum.map(errors, fn {path, _, error} -> "#{elem(error, 1)} in #{path}:#{elem(error, 0)}" end)}
+    end
   end
 
   defp compile_files(paths, results, modules_paths, modules_functions) do

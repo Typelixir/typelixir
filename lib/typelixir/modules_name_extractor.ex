@@ -1,4 +1,4 @@
-defmodule ModuleNamesExtractor do
+defmodule Typelixir.ModuleNamesExtractor do
   @moduledoc false
 
   def extract_modules_names(all_paths) do
