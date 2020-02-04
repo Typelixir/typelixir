@@ -60,8 +60,8 @@ defmodule Typelixir.Processor do
   # ---------------------------------------------------------------------------------------------------
 
   # {:@, _, [{:spec, _, [{:::, _, [{fn_name, _, [type_of_args]}, type_of_return]}]}]}
-  # {:functype, _, [{fn_name, _, _}, args, type_of_return]}
-  defp process({:functype, _, [{fn_name, _, _}, type_of_args, type_of_return]} = elem, env) do
+  # {:typedfunc, _, [{fn_name, _, _}, args, type_of_return]}
+  defp process({:typedfunc, _, [{fn_name, _, _}, type_of_args, type_of_return]} = elem, env) do
     type_of_args = Enum.map(type_of_args, fn type -> TypeBuilder.build(type, env[:vars]) end)
     fn_type = {TypeBuilder.build(type_of_return, env[:vars]), type_of_args}
 
