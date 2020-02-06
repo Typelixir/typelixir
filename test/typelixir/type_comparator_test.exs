@@ -133,5 +133,61 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater([:float, :string, :integer], [:float, :string]) === nil
     end
   end
+
+  describe "has_type?" do
+    test "returns true when argument is equal to type" do
+      assert TypeComparator.has_type?(:string, :string) === true
+      assert TypeComparator.has_type?(:boolean, :boolean) === true
+      assert TypeComparator.has_type?(:integer, :integer) === true
+      assert TypeComparator.has_type?(:float, :float) === true
+      assert TypeComparator.has_type?(:atom, :atom) === true
+      assert TypeComparator.has_type?(nil, nil) === true
+
+      assert TypeComparator.has_type?(:float, nil) === false
+      assert TypeComparator.has_type?(:integer, :float) === false
+      assert TypeComparator.has_type?(:string, :boolean) === false
+    end
+
+    test "returns true when key or value types of map are equal to type" do
+      assert TypeComparator.has_type?({:map, {:integer, :string}}, :integer) === true
+      assert TypeComparator.has_type?({:map, {:integer, {:list, :integer}}}, :integer) === true
+      assert TypeComparator.has_type?({:map, {:integer, nil}}, :integer) === true
+      assert TypeComparator.has_type?({:map, {nil, :integer}}, :integer) === true
+
+      assert TypeComparator.has_type?({:map, {nil, nil}}, :float) === false
+      assert TypeComparator.has_type?({:map, {:integer, :string}}, :float) === false
+      assert TypeComparator.has_type?({:map, {:integer, :integer}}, :boolean) === false
+    end
+
+    test "returns true when one of tuple types is equal to type" do
+      assert TypeComparator.has_type?({:tuple, [nil, :integer]}, :integer) === true
+      assert TypeComparator.has_type?({:tuple, [:integer, :string]}, :integer) === true
+      assert TypeComparator.has_type?({:tuple, [:integer, {:list, :integer}, :boolean]}, :integer) === true
+
+      assert TypeComparator.has_type?({:tuple, []}, :float) === false
+      assert TypeComparator.has_type?({:tuple, [nil, nil]}, :float) === false
+      assert TypeComparator.has_type?({:tuple, [:boolean, :string]}, :integer) === false
+    end
+
+    test "returns true when type of list contains type" do
+      assert TypeComparator.has_type?({:list, :integer}, :integer) === true
+      assert TypeComparator.has_type?({:list, {:list, :integer}}, :integer) === true
+      assert TypeComparator.has_type?({:list, {:list, nil}}, nil) === true
+
+      assert TypeComparator.has_type?({:list, nil}, :float) === false
+      assert TypeComparator.has_type?({:list, {:list, nil}}, :boolean) === false
+    end
+
+    test "returns true when one of the types on a list is equal to type" do
+      assert TypeComparator.has_type?([:integer, :string], :integer) === true
+      assert TypeComparator.has_type?([:integer, {:list, :float}, :boolean], :float) === true
+      assert TypeComparator.has_type?([:integer, {:list, :float}, nil], nil) === true
+
+      assert TypeComparator.has_type?([], :float) === false
+      assert TypeComparator.has_type?([nil], :atom) === false
+      assert TypeComparator.has_type?([nil, :string], :atom) === false
+      assert TypeComparator.has_type?([:integer, nil, :string], :float) === false
+    end
+  end
 end
   

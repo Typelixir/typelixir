@@ -49,4 +49,21 @@ defmodule Typelixir.TypeComparator do
   def greater(type, nil), do: type
 
   def greater(_, _), do: nil
+
+  # ---------------------------------------------------------------------------------------------------
+
+  def has_type?(list_type, type) when is_list(list_type) do
+    Enum.map(list_type, fn t -> has_type?(t, type) end) |> Enum.member?(true)
+  end
+
+  def has_type?({:map, {key_type, value_type}}, type), 
+    do: has_type?(key_type, type) or has_type?(value_type, type)
+
+  def has_type?({:tuple, list_type}, type), do: has_type?(list_type, type)
+
+  def has_type?({:list, list_type}, type), do: has_type?(list_type, type)
+
+  def has_type?(type1, type2) when type1 === type2, do: true
+
+  def has_type?(_, _), do: false
 end
