@@ -33,7 +33,7 @@ defmodule Typelixir.Processor do
   # {{:., _, [{:__aliases__, _, [module_name]}, fn_name]}, _, args}
   defp process({{:., [line: line], [{:__aliases__, _, [mod_name]}, fn_name]}, _, args} = elem, env) do
     if (env[:modules_functions][mod_name][fn_name]) do
-      type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type, env[:vars]) end)
+      type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
       type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)
       
       if (TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee)), do: {elem, env},
@@ -62,8 +62,8 @@ defmodule Typelixir.Processor do
   # {:@, _, [{:spec, _, [{:::, _, [{fn_name, _, [type_of_args]}, type_of_return]}]}]}
   # {:typedfunc, _, [{fn_name, _, _}, args, type_of_return]}
   defp process({:typedfunc, _, [{fn_name, _, _}, type_of_args, type_of_return]} = elem, env) do
-    type_of_args = Enum.map(type_of_args, fn type -> TypeBuilder.build(type, env[:vars]) end)
-    fn_type = {TypeBuilder.build(type_of_return, env[:vars]), type_of_args}
+    type_of_args = Enum.map(type_of_args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
+    fn_type = {TypeBuilder.build(type_of_return, %{vars: env[:vars], mod_funcs: env[:modules_functions]}), type_of_args}
 
     new_module_map = Map.put(env[:modules_functions][env[:module_name]], fn_name, fn_type)
     modules_functions = Map.put(env[:modules_functions], env[:module_name], new_module_map)
@@ -80,18 +80,18 @@ defmodule Typelixir.Processor do
   end
 
   defp process({:list, [_], [{variable, _, _}, type]} = elem, env) do
-    vars = Map.put(env[:vars], variable, {:list, TypeBuilder.build(type, env[:vars])})
+    vars = Map.put(env[:vars], variable, {:list, TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]})})
     {elem, %{env | vars: vars}}
   end
 
   defp process({:tuple, [_], [{variable, _, _}, types_list]} = elem, env) do
-    tuple_type = Enum.map(types_list, fn type -> TypeBuilder.build(type, env[:vars]) end)
+    tuple_type = Enum.map(types_list, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
     vars = Map.put(env[:vars], variable, {:tuple, tuple_type})
     {elem, %{env | vars: vars}}
   end
 
   defp process({:map, [_], [{variable, _, _}, key_type, value_type]} = elem, env) do
-    vars = Map.put(env[:vars], variable, {:map, {TypeBuilder.build(key_type, env[:vars]), TypeBuilder.build(value_type, env[:vars])}})
+    vars = Map.put(env[:vars], variable, {:map, {TypeBuilder.build(key_type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}), TypeBuilder.build(value_type, %{vars: env[:vars], mod_funcs: env[:modules_functions]})}})
     {elem, %{env | vars: vars}}
   end
 
