@@ -17,6 +17,13 @@ defmodule Typelixir.Processor do
     result
   end
 
+  # HANDLE ERROR / NEEDS COMPILE
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process(elem, %{:state => :error, :data => _, :module_name => _, :vars => _, :modules_functions => _} = env), do: {elem, env}
+
+  defp process(elem, %{:state => :needs_compile, :data => _, :module_name => _, :vars => _, :modules_functions => _} = env), do: {elem, env}
+
   # MODULES
   # ---------------------------------------------------------------------------------------------------
 
@@ -95,7 +102,7 @@ defmodule Typelixir.Processor do
     {elem, %{env | vars: vars}}
   end
 
-  # BASE CASES
+  # BASE CASE
   # ---------------------------------------------------------------------------------------------------
 
   defp process(elem, env), do: {elem, env}
