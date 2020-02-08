@@ -90,5 +90,72 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleThree]}, :test]}, [line: 7], [1]}, @env) === nil
     end
   end
+
+  describe "from_int_to_float" do
+    @env %{
+      vars: %{
+        a: :integer,
+        b: :float,
+        c: {:list, :integer},
+        d: {:tuple, [{:list, :integer}, :string]},
+        e: {:map, {:integer, {:tuple, [:integer]}}}
+      },
+      mod_funcs: %{
+        ModuleOne: %{}
+      }
+    }
+
+    test "changes variables from integer to float" do
+      # a
+      assert TypeBuilder.from_int_to_float({:a, [line: 7], nil}, 1.2, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({:a, [line: 7], nil}, {:b, [line: 7], nil}, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+
+      # c
+      assert TypeBuilder.from_int_to_float({:c, [line: 7], nil}, [1.2], @env) 
+        === %{a: :integer, b: :float, c: {:list, :float}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({:c, [line: 7], nil}, [{:b, [line: 7], nil}, 2], @env) 
+        === %{a: :integer, b: :float, c: {:list, :float}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+
+      # d
+      assert TypeBuilder.from_int_to_float({:d, [line: 7], nil}, {[1, 2.3], "test"}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :float}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({:d, [line: 7], nil}, {[1, {:b, [line: 7], nil}], "test"}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :float}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+
+      # e
+      assert TypeBuilder.from_int_to_float({:e, [line: 7], nil}, {:%{}, [line: 7], [{1.5, {1.2}}]}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:float, {:tuple, [:float]}}}}
+      assert TypeBuilder.from_int_to_float({:e, [line: 7], nil}, {:%{}, [line: 7], [{1.5, {{:b, [line: 7], nil}}}]}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:float, {:tuple, [:float]}}}}
+    end
+
+    test "changes variables from integer to float inside a pattern" do
+      # list
+      assert TypeBuilder.from_int_to_float([1, {:a, [line: 7], nil}], [1, 1.2], @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float([1, {:a, [line: 7], nil}], [1, {:b, [line: 7], nil}], @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float([1.2, {:a, [line: 7], nil}], [1.2, 1], @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+
+      # tuple
+      assert TypeBuilder.from_int_to_float({1, {:a, [line: 7], nil}}, {1, 1.2}, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({1, {:a, [line: 7], nil}}, {1, {:b, [line: 7], nil}}, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({1.2, {:a, [line: 7], nil}}, {1.2, 1}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+
+      # map
+      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{2, {:a, [line: 7], nil}}]}, {:%{}, [line: 7], [{2, 2.3}]}, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{1, 3}, {2, {:a, [line: 7], nil}}]}, {:%{}, [line: 7], [{1, 3}, {2, {:b, [line: 7], nil}}]}, @env) 
+        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{2, {:a, [line: 7], nil}}, {1, 2.4}]}, {:%{}, [line: 7], [{2, 2}, {1, 2.4}]}, @env) 
+        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+    end
+  end
 end
   

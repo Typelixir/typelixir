@@ -60,4 +60,54 @@ defmodule Typelixir.TypeBuilder do
       true -> nil
     end
   end
+
+  # ---------------------------------------------------------------------------------------------------
+  
+  def from_int_to_float(operand1, operand2, env) do
+    vars_to_change = get_vars(operand1, operand2, env)
+    if is_list(vars_to_change), do: Enum.filter(vars_to_change, & !is_nil(&1)) |> change_vars(env[:vars]),
+      else: Map.replace!(env[:vars], vars_to_change, update_value(env[:vars][vars_to_change]))
+  end
+
+  defp get_vars({:%{}, _, list1}, {:%{}, _, list2}, env) do
+    Enum.zip(list1, list2)
+      |> Enum.map(fn {{_, v1}, {_, v2}} -> get_vars(v1, v2, env) end)
+  end
+
+  defp get_vars({var, _, _}, type, env) do
+    case TypeComparator.has_type?(env[:vars][var], :integer) do
+      true ->
+        case TypeComparator.has_type?(build(type, env), :float) do
+          true -> var
+          _ -> nil
+        end
+      _ -> nil
+    end
+  end
+
+  defp get_vars(list1, list2, env) when is_list(list1) do
+    Enum.zip(list1, list2)
+      |> Enum.map(fn {elem1, elem2} -> get_vars(elem1, elem2, env) end)
+  end
+
+  defp get_vars(tuple1, tuple2, env) when is_tuple(tuple1) do
+    Enum.zip(Tuple.to_list(tuple1), Tuple.to_list(tuple2))
+      |> Enum.map(fn {elem1, elem2} -> get_vars(elem1, elem2, env) end)
+  end
+
+  defp get_vars(_ , _, _), do: nil
+
+  defp change_vars([], vars), do: vars
+
+  defp change_vars([head | tail], vars), do: change_vars(tail, Map.replace!(vars, head, update_value(vars[head])))
+
+  defp update_value({:list, type}), do: {:list, update_value(type)}
+
+  defp update_value({:tuple, types_list}), do: {:tuple, Enum.map(types_list, fn type -> update_value(type) end)}
+
+  defp update_value({:map, {key_type, value_type}}), do: {:map, {update_value(key_type), update_value(value_type)}}
+
+  defp update_value(:integer), do: :float
+
+  defp update_value(type), do: type
 end
