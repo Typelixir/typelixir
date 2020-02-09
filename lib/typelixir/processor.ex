@@ -106,6 +106,27 @@ defmodule Typelixir.Processor do
     end
   end
 
+  # NUMBER OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:*, :+, :/, :-]) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.less_or_equal?(type_operand1, :float) and TypeComparator.less_or_equal?(type_operand2, :float) do
+      false -> {elem, %{env | state: :error, data: {line, "Type error on #{Atom.to_string(operator)} operator"}}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | data: env[:data] ++ [{line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type"}]}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | data: env[:data] ++ [{line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type"}]}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
   # BASE CASE
   # ---------------------------------------------------------------------------------------------------
 

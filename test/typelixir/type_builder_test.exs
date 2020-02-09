@@ -96,6 +96,14 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo]}, :test]}, [line: 7], [1]}, @env) === :string
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo, :ModuleThree]}, :test]}, [line: 7], [1]}, @env) === nil
     end
+
+    test "returns type from operators" do
+      assert TypeBuilder.build({:+, [line: 41], [1, 2]}, @env) === :integer
+      assert TypeBuilder.build({:+, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :integer
+      assert TypeBuilder.build({:+, [line: 41], [2.3, 2]}, @env) === :float
+      assert TypeBuilder.build({:+, [line: 41], [2, 2, 2.4]}, @env) === :float
+      assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === nil
+    end
   end
 
   describe "add_variables" do
