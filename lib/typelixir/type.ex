@@ -24,5 +24,5 @@ defmodule Type do
   defmacro map(_, _) do end
   defmacro map(_, _, _) do end
 
-  defmacro functype(_, _, _) do end
+  defmacro typedfunc(_, _, _) do end
 end

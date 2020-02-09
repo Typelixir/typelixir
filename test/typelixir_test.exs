@@ -73,7 +73,7 @@ defmodule TypelixirTest do
         defmodule Example do
           use Type
 
-          functype test, [integer], (list integer)
+          typedfunc test, [integer], (list integer)
           def test(int) do
             [int]
           end
