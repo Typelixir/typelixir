@@ -48,7 +48,7 @@ defmodule Typelixir.TypeBuilder do
     end
   end
   # Number operators
-  def build({operator, _, operands}, env) when (operator in [:*, :+, :/, :-, :and, :or]) do
+  def build({operator, _, operands}, env) when (operator in [:*, :+, :/, :-, :and, :or, :not]) do
     Enum.map(operands, fn t -> build(t, env) end) |> Enum.reduce(fn acc, e -> 
       if e === nil, do: e, else: TypeComparator.greater(acc, e) end)
   end

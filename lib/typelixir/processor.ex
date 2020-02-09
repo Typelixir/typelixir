@@ -148,6 +148,20 @@ defmodule Typelixir.Processor do
     end
   end
 
+  # Not
+  defp process({:not, [line: line], [operand]} = elem, env) do
+    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.less_or_equal?(type_operand, :boolean) do
+      false -> {elem, %{env | state: :error, data: {line, "Type error on not operator"}}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand, nil) do
+          true -> {elem, %{env | data: env[:data] ++ [{line, "Argument of not doesn't have a defined type"}]}}
+          _ -> {elem, env}
+        end
+    end
+  end
+
   # BASE CASE
   # ---------------------------------------------------------------------------------------------------
 

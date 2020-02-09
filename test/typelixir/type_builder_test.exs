@@ -108,6 +108,11 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:and, [line: 41], [true, true]}, @env) === :boolean
       assert TypeBuilder.build({:or, [line: 41], [{:e, [line: 41], nil}, false]}, @env) === :boolean
       assert TypeBuilder.build({:and, [line: 41], [{:e, [line: 41], nil}, {:z, [line: 41], nil}, 2]}, @env) === nil
+
+      assert TypeBuilder.build({:not, [line: 41], [true]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:e, [line: 41], nil}]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:e, [line: 41], nil}, true]}]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, true]}]}, @env) === nil
     end
   end
 
