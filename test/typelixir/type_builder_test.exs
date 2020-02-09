@@ -8,7 +8,8 @@ defmodule Typelixir.TypeBuilderTest do
         a: :integer,
         b: :string,
         c: {:tuple, [{:list, :integer}, :string]},
-        d: {:list, :integer}
+        d: {:list, :integer},
+        e: :boolean
       },
       mod_name: :ModuleOne,
       mod_funcs: %{
@@ -99,10 +100,14 @@ defmodule Typelixir.TypeBuilderTest do
 
     test "returns type from operators" do
       assert TypeBuilder.build({:+, [line: 41], [1, 2]}, @env) === :integer
-      assert TypeBuilder.build({:+, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :integer
-      assert TypeBuilder.build({:+, [line: 41], [2.3, 2]}, @env) === :float
-      assert TypeBuilder.build({:+, [line: 41], [2, 2, 2.4]}, @env) === :float
+      assert TypeBuilder.build({:*, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [2.3, 2]}, @env) === :float
+      assert TypeBuilder.build({:/, [line: 41], [2, 2, 2.4]}, @env) === :float
       assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === nil
+
+      assert TypeBuilder.build({:and, [line: 41], [true, true]}, @env) === :boolean
+      assert TypeBuilder.build({:or, [line: 41], [{:e, [line: 41], nil}, false]}, @env) === :boolean
+      assert TypeBuilder.build({:and, [line: 41], [{:e, [line: 41], nil}, {:z, [line: 41], nil}, 2]}, @env) === nil
     end
   end
 
