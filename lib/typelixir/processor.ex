@@ -62,30 +62,6 @@ defmodule Typelixir.Processor do
     end
   end
 
-  # VARIABLES
-  # ---------------------------------------------------------------------------------------------------
-  
-  defp process({type, [_], [{variable, _, _}]} = elem, env) when (type in [:string, :boolean, :integer, :float, :atom]) do
-    vars = Map.put(env[:vars], variable, type)
-    {elem, %{env | vars: vars}}
-  end
-
-  defp process({:list, [_], [{variable, _, _}, type]} = elem, env) do
-    vars = Map.put(env[:vars], variable, {:list, TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]})})
-    {elem, %{env | vars: vars}}
-  end
-
-  defp process({:tuple, [_], [{variable, _, _}, types_list]} = elem, env) do
-    tuple_type = Enum.map(types_list, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
-    vars = Map.put(env[:vars], variable, {:tuple, tuple_type})
-    {elem, %{env | vars: vars}}
-  end
-
-  defp process({:map, [_], [{variable, _, _}, key_type, value_type]} = elem, env) do
-    vars = Map.put(env[:vars], variable, {:map, {TypeBuilder.build(key_type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}), TypeBuilder.build(value_type, %{vars: env[:vars], mod_funcs: env[:modules_functions]})}})
-    {elem, %{env | vars: vars}}
-  end
-
   # BINDING
   # ---------------------------------------------------------------------------------------------------
 
