@@ -2,11 +2,12 @@ defmodule Typelixir.TypeComparator do
   def less_or_equal?(type1, type2) when type1 === type2, do: true
   
   def less_or_equal?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
-    if (length(list_type1) === length(list_type2)), 
-      do: not (Enum.zip(list_type1, list_type2)
-          |> Enum.map(fn {type1, type2} -> less_or_equal?(type1, type2) end)
-          |> Enum.member?(false)),
-      else: false
+    if length(list_type1) === length(list_type2) do
+      types = Enum.zip(list_type1, list_type2) |> Enum.map(fn {type1, type2} -> less_or_equal?(type1, type2) end)
+      if Enum.member?(types, :error), do: :error, else: not Enum.member?(types, false)
+    else
+      :error
+    end
   end
 
   def less_or_equal?({:map, {key_type1, value_type1}}, {:map, {key_type2, value_type2}}), 
@@ -18,9 +19,13 @@ defmodule Typelixir.TypeComparator do
 
   def less_or_equal?(:integer, :float), do: true
 
+  def less_or_equal?(:float, :integer), do: false
+
   def less_or_equal?(nil, _), do: true
 
-  def less_or_equal?(_, _), do: false
+  def less_or_equal?(_, nil), do: false
+
+  def less_or_equal?(_, _), do: :error
 
   # ---------------------------------------------------------------------------------------------------
 
@@ -30,7 +35,7 @@ defmodule Typelixir.TypeComparator do
     if (length(list_type1) === length(list_type2)), 
       do: Enum.zip(list_type1, list_type2)
           |> Enum.map(fn {type1, type2} -> greater(type1, type2) end),
-      else: nil
+      else: :error
   end
 
   def greater({:map, {key_type1, value_type1}}, {:map, {key_type2, value_type2}}), 
@@ -48,7 +53,11 @@ defmodule Typelixir.TypeComparator do
 
   def greater(type, nil), do: type
 
-  def greater(_, _), do: nil
+  def greater(:error, _), do: :error
+
+  def greater(_, :error), do: :error
+
+  def greater(_, _), do: :error
 
   # ---------------------------------------------------------------------------------------------------
 

@@ -49,7 +49,7 @@ defmodule Typelixir.TypeBuilderTest do
 
     test "returns list type from literals" do
       assert TypeBuilder.build([], @env) === {:list, nil}
-      assert TypeBuilder.build([1, "a", :c], @env) === {:list, nil}
+      assert TypeBuilder.build([1, "a", :c], @env) === {:list, :error}
       assert TypeBuilder.build([1, 1.2], @env) === {:list, :float}
       assert TypeBuilder.build([1], @env) === {:list, :integer}
       assert TypeBuilder.build([true, false], @env) === {:list, :boolean}
@@ -59,8 +59,8 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({}, @env) === {:tuple, []}
       assert TypeBuilder.build({1, 2}, @env) === {:tuple, [:integer, :integer]}
       assert TypeBuilder.build({1, 1.2}, @env) === {:tuple, [:integer, :float]}
-      assert TypeBuilder.build(
-        {"a", :b, [1], {:%{}, [line: 8], [{2, {"a", 1}}, {2.1, {"a", 1}}]}, {:test}}, @env) 
+      assert TypeBuilder.build({:{}, [line: 7],
+        ["a", :b, [1], {:%{}, [line: 8], [{2, {"a", 1}}, {2.1, {"a", 1}}]}, {:test}]}, @env)
         === {:tuple, [:string, :atom, {:list, :integer}, {:map, {:float, {:tuple, [:string, :integer]}}}, {:tuple, [:atom]}]}
     end
 
@@ -69,8 +69,8 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:%{}, [line: 8], [{1, 2}]}, @env) === {:map, {:integer, :integer}}
       assert TypeBuilder.build({:%{}, [line: 8], [{1, 2.1}]}, @env) === {:map, {:integer, :float}}
       assert TypeBuilder.build({:%{}, [line: 8], [{1, 2.1}, {2.1, 1}]}, @env) === {:map, {:float, :float}}
-      assert TypeBuilder.build({:%{}, [line: 8], [{"a", 2.1}, {2.1, 1}]}, @env) === {:map, {nil, :float}}
-      assert TypeBuilder.build({:%{}, [line: 8], [{"a", 2.1}, {2.1, true}]}, @env) === {:map, {nil, nil}}
+      assert TypeBuilder.build({:%{}, [line: 8], [{"a", 2.1}, {2.1, 1}]}, @env) === {:map, {:error, :float}}
+      assert TypeBuilder.build({:%{}, [line: 8], [{"a", 2.1}, {2.1, true}]}, @env) === {:map, {:error, :error}}
       assert TypeBuilder.build({:%{}, [line: 8], [{2, {"a", 1}}, {2.1, {"a", 1}}]}, @env) 
         === {:map, {:float, {:tuple, [:string, :integer]}}}
     end
