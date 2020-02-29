@@ -37,7 +37,8 @@ defmodule Typelixir.Processor do
   # ---------------------------------------------------------------------------------------------------
 
   # {{:., _, [{:__aliases__, _, [module_name]}, fn_name]}, _, args}
-  defp process({{:., [line: line], [{:__aliases__, _, [mod_name]}, fn_name]}, _, args} = elem, env) do
+  defp process({{:., [line: line], [{:__aliases__, _, mod_names}, fn_name]}, _, args} = elem, env) do
+    mod_name = List.last(mod_names)
     if (env[:modules_functions][mod_name][fn_name]) do
       type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
       type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)

@@ -86,8 +86,8 @@ defmodule Typelixir.TypeBuilderTest do
     test "returns type from modules functions" do
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne]}, :test]}, [line: 7], [1]}, @env) === :integer
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne]}, :test2]}, [line: 7], [1]}, @env) === nil
-      assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleTwo]}, :test]}, [line: 7], [1]}, @env) === :string
-      assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleThree]}, :test]}, [line: 7], [1]}, @env) === nil
+      assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo]}, :test]}, [line: 7], [1]}, @env) === :string
+      assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo, :ModuleThree]}, :test]}, [line: 7], [1]}, @env) === nil
     end
   end
 

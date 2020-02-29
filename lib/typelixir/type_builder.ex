@@ -27,7 +27,8 @@ defmodule Typelixir.TypeBuilder do
   end
 
   # Functions
-  def build({{:., _, [{:__aliases__, _, [mod_name]}, fn_name]}, _, _}, env) do
+  def build({{:., _, [{:__aliases__, _, mod_names}, fn_name]}, _, _}, env) do
+    mod_name = List.last(mod_names)
     type = env[:mod_funcs][mod_name][fn_name]
     case type do
       nil -> nil
