@@ -91,70 +91,96 @@ defmodule Typelixir.TypeBuilderTest do
     end
   end
 
-  describe "from_int_to_float" do
+  describe "add_variables" do
     @env %{
       vars: %{
         a: :integer,
-        b: :float,
-        c: {:list, :integer},
-        d: {:tuple, [{:list, :integer}, :string]},
-        e: {:map, {:integer, {:tuple, [:integer]}}}
+        b: :string,
+        c: {:tuple, [{:list, :integer}, :string]},
+        d: {:list, :integer}
       },
       mod_funcs: %{
-        ModuleOne: %{}
+        ModuleOne: %{
+          test: {:integer, [:integer]},
+          test2: {nil, [:integer]},
+        },
+        ModuleTwo: %{test: {:string, []}},
+        ModuleThree: %{}
       }
     }
 
-    test "changes variables from integer to float" do
-      # a
-      assert TypeBuilder.from_int_to_float({:a, [line: 7], nil}, 1.2, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({:a, [line: 7], nil}, {:b, [line: 7], nil}, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-
-      # c
-      assert TypeBuilder.from_int_to_float({:c, [line: 7], nil}, [1.2], @env) 
-        === %{a: :integer, b: :float, c: {:list, :float}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({:c, [line: 7], nil}, [{:b, [line: 7], nil}, 2], @env) 
-        === %{a: :integer, b: :float, c: {:list, :float}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-
-      # d
-      assert TypeBuilder.from_int_to_float({:d, [line: 7], nil}, {[1, 2.3], "test"}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :float}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({:d, [line: 7], nil}, {[1, {:b, [line: 7], nil}], "test"}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :float}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-
-      # e
-      assert TypeBuilder.from_int_to_float({:e, [line: 7], nil}, {:%{}, [line: 7], [{1.5, {1.2}}]}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:float, {:tuple, [:float]}}}}
-      assert TypeBuilder.from_int_to_float({:e, [line: 7], nil}, {:%{}, [line: 7], [{1.5, {{:b, [line: 7], nil}}}]}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:float, {:tuple, [:float]}}}}
+    test "does not add variables if the type of operand 2 is nil" do
+      assert TypeBuilder.add_variables({:z, [line: 7], nil}, nil, {:h, [line: 7], nil}, nil, @env) === @env[:vars]
+      assert TypeBuilder.add_variables({:a, [line: 7], nil}, :integer, {:h, [line: 7], nil}, nil, @env) === @env[:vars]
+      assert TypeBuilder.add_variables({:c, [line: 7], nil}, {:list, :integer}, {{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne]}, :test_fail]}, [line: 7], [1]}, nil, @env) === @env[:vars]
     end
 
-    test "changes variables from integer to float inside a pattern" do
-      # list
-      assert TypeBuilder.from_int_to_float([1, {:a, [line: 7], nil}], [1, 1.2], @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float([1, {:a, [line: 7], nil}], [1, {:b, [line: 7], nil}], @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float([1.2, {:a, [line: 7], nil}], [1.2, 1], @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+    test "add variable when type of operand1 is nil" do
+      assert TypeBuilder.add_variables({:z, [line: 7], nil}, nil, {:a, [line: 7], nil}, :integer, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, z: :integer}
 
-      # tuple
-      assert TypeBuilder.from_int_to_float({1, {:a, [line: 7], nil}}, {1, 1.2}, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({1, {:a, [line: 7], nil}}, {1, {:b, [line: 7], nil}}, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({1.2, {:a, [line: 7], nil}}, {1.2, 1}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.add_variables({:y, [line: 7], nil}, nil, true, :boolean, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: :boolean}
 
-      # map
-      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{2, {:a, [line: 7], nil}}]}, {:%{}, [line: 7], [{2, 2.3}]}, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{1, 3}, {2, {:a, [line: 7], nil}}]}, {:%{}, [line: 7], [{1, 3}, {2, {:b, [line: 7], nil}}]}, @env) 
-        === %{a: :float, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
-      assert TypeBuilder.from_int_to_float({:%{}, [line: 7], [{2, {:a, [line: 7], nil}}, {1, 2.4}]}, {:%{}, [line: 7], [{2, 2}, {1, 2.4}]}, @env) 
-        === %{a: :integer, b: :float, c: {:list, :integer}, d: {:tuple, [{:list, :integer}, :string]}, e: {:map, {:integer, {:tuple, [:integer]}}}}
+      assert TypeBuilder.add_variables({:y, [line: 7], nil}, nil, {true, "a"}, {:tuple, [:boolean, :string]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:tuple, [:boolean, :string]}}
+
+      assert TypeBuilder.add_variables({:y, [line: 7], nil}, nil, {:d, [line: 7], nil}, {:list, :integer}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}}
+    end
+
+    test "add the variables that are inside a list" do
+      assert TypeBuilder.add_variables([], {:list, nil}, [], {:list, nil}, @env) === @env[:vars]
+
+      assert TypeBuilder.add_variables([{:z, [line: 7], nil}, 2], {:list, :integer}, [{:a, [line: 7], nil}, 4], {:list, :integer}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, z: :integer}
+
+      assert TypeBuilder.add_variables([false, {:y, [line: 7], nil}, true], {:list, :boolean}, [true, false, false], {:list, :boolean}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: :boolean}
+
+      assert TypeBuilder.add_variables([{:y, [line: 7], nil}, {false, "ate"}], {:list, {:tuple, [:boolean, :string]}}, [{true, "a"}, {true, "a"}], {:list, {:tuple, [:boolean, :string]}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:tuple, [:boolean, :string]}}
+
+      assert TypeBuilder.add_variables([[{:y, [line: 7], nil}], [1,2]], {:list, {:list, :integer}}, [[{:d, [line: 7], nil}], [{:d, [line: 7], nil}]], {:list, {:list, :integer}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}}
+
+      assert TypeBuilder.add_variables([[{:y, [line: 7], nil}], [{:z, [line: 7], nil}, 2]], {:list, nil}, [[{:d, [line: 7], nil}], [{:d, [line: 7], nil}, 2]], {:list, {:list, :integer}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}, z: {:list, :integer}}
+    end
+
+    test "add the variables that are inside a tuple" do
+      assert TypeBuilder.add_variables({}, {:tuple, []}, {}, {:tuple, []}, @env) === @env[:vars]
+
+      assert TypeBuilder.add_variables({{:z, [line: 7], nil}, 2}, {:tuple, [nil, :integer]}, {{:a, [line: 7], nil}, 4}, {:tuple, [:integer, :integer]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, z: :integer}
+
+      assert TypeBuilder.add_variables({:{}, [line: 7], [false, {:y, [line: 7], nil}, true]}, {:tuple, [:boolean, nil, :boolean]}, {:{}, [line: 7], [true, false, false]}, {:tuple, [:boolean, :boolean, :boolean]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: :boolean}
+
+      assert TypeBuilder.add_variables({{:y, [line: 7], nil}, {false, "ate"}}, {:tuple, [nil, {:tuple, [:boolean, :string]}]}, {{true, "a"}, {true, "a"}}, {:tuple, [{:tuple, [:boolean, :string]}, {:tuple, [:boolean, :string]}]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:tuple, [:boolean, :string]}}
+
+      assert TypeBuilder.add_variables({[{:y, [line: 7], nil}], [1,2]}, {:tuple, [nil, {:list, :integer}]}, {[{:d, [line: 7], nil}], [{:d, [line: 7], nil}]}, {:tuple, [{:list, :integer}, {:list, :integer}]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}}
+
+      assert TypeBuilder.add_variables({:{}, [line: 7], [[{:y, [line: 7], nil}], [{:z, [line: 7], nil}, 2], [1,2]]}, {:tuple, [nil, nil]}, {:{}, [line: 7], [[{:d, [line: 7], nil}], [{:d, [line: 7], nil}, 2], [1, 2]]}, {:tuple, [{:list, :integer}, {:list, :integer}]}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}, z: {:list, :integer}}
+    end
+
+    test "add the variables that are inside a map" do
+      assert TypeBuilder.add_variables({:%{}, [line: 7], []}, {:map, {nil, nil}}, {:%{}, [line: 7], []}, {:map, {nil, nil}}, @env) === @env[:vars]
+
+      assert TypeBuilder.add_variables({:%{}, [line: 7], [{2, {:z, [line: 7], nil}}]}, {:map, {:integer, nil}}, {:%{}, [line: 7], [{2, {:a, [line: 7], nil}}]}, {:map, {:integer, :integer}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, z: :integer}
+
+      assert TypeBuilder.add_variables({:%{}, [line: 7], [{false, {:y, [line: 7], nil}}, {true, false}]}, {:map, {:boolean, :boolean}}, {:%{}, [line: 7], [{false, false}, {true, false}]}, {:map, {:boolean, :boolean}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: :boolean}
+
+      assert TypeBuilder.add_variables({:%{}, [line: 7], [{{true, "a"}, {:y, [line: 7], nil}}]}, {:map, {{:tuple, [:boolean, :string]}, nil}}, {:%{}, [line: 7], [{{true, "a"}, {false, "b"}}]}, {:map, {{:tuple, [:boolean, :string]}, {:tuple, [:boolean, :string]}}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:tuple, [:boolean, :string]}}
+
+      assert TypeBuilder.add_variables({:%{}, [line: 7], [{1, [{:y, [line: 7], nil}]}, {2, [{:z, [line: 7], nil}]}]}, {:map, {:integer, {:list, nil}}}, {:%{}, [line: 7], [{1, [{:d, [line: 7], nil}]}, {2, [{:d, [line: 7], nil}]}]}, {:map, {:integer, {:list, :integer}}}, @env) ===
+        %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}, z: {:list, :integer}}
     end
   end
 end
