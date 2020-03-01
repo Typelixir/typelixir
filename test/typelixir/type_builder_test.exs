@@ -10,6 +10,7 @@ defmodule Typelixir.TypeBuilderTest do
         c: {:tuple, [{:list, :integer}, :string]},
         d: {:list, :integer}
       },
+      mod_name: :ModuleOne,
       mod_funcs: %{
         ModuleOne: %{
           test: {:integer, [:integer]},
@@ -81,6 +82,12 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:b, [line: 7], nil}, @env) === :string
       assert TypeBuilder.build({:c, [line: 7], nil}, @env) === {:tuple, [{:list, :integer}, :string]}
       assert TypeBuilder.build({:d, [line: 7], nil}, @env) === {:list, :integer}
+    end
+
+    test "returns type from own functions" do
+      assert TypeBuilder.build({:test, [line: 7], nil}, @env) === :integer
+      assert TypeBuilder.build({:test2, [line: 7], nil}, @env) === nil
+      assert TypeBuilder.build({:error, [line: 7], nil}, @env) === nil
     end
 
     test "returns type from modules functions" do

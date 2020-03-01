@@ -36,8 +36,17 @@ defmodule Typelixir.TypeBuilder do
     end
   end
 
-  # Variables
-  def build({type, _, _}, env), do: env[:vars][type]
+  # Variables or function defined on the compiling module
+  def build({type, _, _}, env) do
+    case env[:vars][type] do
+      nil -> 
+        case env[:mod_funcs][env[:mod_name]][type] do
+          nil -> nil
+          type -> elem(type, 0)
+        end
+      type -> type
+    end
+  end
 
   # Literal List
   def build([], _env), do: {:list, nil}
