@@ -78,22 +78,49 @@ defmodule Typelixir.TypeComparator do
 
   # ---------------------------------------------------------------------------------------------------
   
-  def int_to_float?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
-    if (length(list_type1) === length(list_type2)), 
-      do: (Enum.zip(list_type1, list_type2)
-          |> Enum.map(fn {type1, type2} -> int_to_float?(type1, type2) end)
-          |> Enum.member?(true)),
-      else: false
+  # float_to_int? returns true if op1 has type integer and op2 has type float because means that
+  # we are binding a float to an integer and that is an error
+
+  # Literals
+  def float_to_int?(op1, op2, _env) when (is_integer(op1) and is_float(op2)), do: true
+
+  # Tuple
+  def float_to_int?({:{}, _, op1}, {:{}, _, op2}, env) do
+    Enum.map(Enum.zip(op1, op2), 
+      fn {op1, op2} -> float_to_int?(op1, op2, env) end) 
+        |> Enum.member?(true)
   end
 
-  def int_to_float?({:map, {key_type1, value_type1}}, {:map, {key_type2, value_type2}}), 
-    do: int_to_float?(key_type1, key_type2) or int_to_float?(value_type1, value_type2)
+  # Map
+  def float_to_int?({:%{}, _, op1}, {:%{}, _, op2}, env) do
+    Enum.map(Enum.zip(op1, op2), 
+      fn {op1, op2} -> float_to_int?(op1, op2, env) end) 
+        |> Enum.member?(true)
+  end
 
-  def int_to_float?({:tuple, list_type1}, {:tuple, list_type2}), do: int_to_float?(list_type1, list_type2)
+  # Variables
+  def float_to_int?({op1, _, _}, {op2, _, _}, env) do
+    if (env[:vars][op1] === :integer and env[:vars][op2] === :float), do: true, else: false
+  end
 
-  def int_to_float?({:list, type1}, {:list, type2}), do: int_to_float?(type1, type2)
+  # Variable - literal
+  def float_to_int?({op1, _, _}, op2, env) do
+    if (env[:vars][op1] === :integer and is_float(op2)), do: true, else: false
+  end
 
-  def int_to_float?(:integer, :float), do: true
+  # List
+  def float_to_int?(op1, op2, env) when is_list(op1) do
+    Enum.map(Enum.zip(op1, op2), 
+      fn {op1, op2} -> float_to_int?(op1, op2, env) end) 
+        |> Enum.member?(true)
+  end
 
-  def int_to_float?(_, _), do: false
+  # Tuple
+  def float_to_int?(op1, op2, env) when is_tuple(op1) do
+    Enum.map(Enum.zip(Tuple.to_list(op1), Tuple.to_list(op2)), 
+      fn {op1, op2} -> float_to_int?(op1, op2, env) end) 
+        |> Enum.member?(true)
+  end
+
+  def float_to_int?(_, _, _), do: false
 end
