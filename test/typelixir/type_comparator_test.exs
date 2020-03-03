@@ -11,12 +11,12 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.less_or_equal?(:atom, :atom) === true
     end
 
-    test "returns false when types are not comparable" do
-      assert TypeComparator.less_or_equal?(:string, :boolean) === false
-      assert TypeComparator.less_or_equal?(:boolean, :integer) === false
-      assert TypeComparator.less_or_equal?(:integer, :atom) === false
-      assert TypeComparator.less_or_equal?({:tuple, [:integer]}, :float) === false
-      assert TypeComparator.less_or_equal?({:list, :string}, {:tuple, [:integer]}) === false
+    test "returns error when types are not comparable" do
+      assert TypeComparator.less_or_equal?(:string, :boolean) === :error
+      assert TypeComparator.less_or_equal?(:boolean, :integer) === :error
+      assert TypeComparator.less_or_equal?(:integer, :atom) === :error
+      assert TypeComparator.less_or_equal?({:tuple, [:integer]}, :float) === :error
+      assert TypeComparator.less_or_equal?({:list, :string}, {:tuple, [:integer]}) === :error
     end
 
     test "returns true because integer is less than float" do
@@ -36,7 +36,8 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.less_or_equal?({:map, {:integer, :string}}, {:map, {:integer, :string}}) === true
       assert TypeComparator.less_or_equal?({:map, {:integer, :string}}, {:map, {:float, :string}}) === true
       assert TypeComparator.less_or_equal?({:map, {:integer, {:list, :integer}}}, {:map, {:float, {:list, :integer}}}) === true
-      assert TypeComparator.less_or_equal?({:map, {:integer, :string}}, {:map, {:float, :atom}}) === false
+      assert TypeComparator.less_or_equal?({:map, {:float, :string}}, {:map, {:integer, :string}}) === false
+      assert TypeComparator.less_or_equal?({:map, {:integer, :string}}, {:map, {:float, :atom}}) === :error
     end
 
     test "returns true when all types of tuple1 are less or equal than tuple2" do
@@ -45,7 +46,8 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.less_or_equal?({:tuple, [:integer, :string]}, {:tuple, [:integer, :string]}) === true
       assert TypeComparator.less_or_equal?({:tuple, [:integer, :string]}, {:tuple, [:float, :string]}) === true
       assert TypeComparator.less_or_equal?({:tuple, [:integer, {:list, :integer}, :boolean]}, {:tuple, [:float, {:list, :float}, :boolean]}) === true
-      assert TypeComparator.less_or_equal?({:tuple, [:integer, :string]}, {:tuple, [:float, :atom]}) === false
+      assert TypeComparator.less_or_equal?({:tuple, [:float, :string]}, {:tuple, [:integer, :string]}) === false
+      assert TypeComparator.less_or_equal?({:tuple, [:integer, :string]}, {:tuple, [:float, :atom]}) === :error
     end
 
     test "returns true when type of list1 is less or equal than list2" do
@@ -53,7 +55,8 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.less_or_equal?({:list, :integer}, {:list, :integer}) === true
       assert TypeComparator.less_or_equal?({:list, :integer}, {:list, :float}) === true
       assert TypeComparator.less_or_equal?({:list, {:list, :integer}}, {:list, {:list, :float}}) === true
-      assert TypeComparator.less_or_equal?({:list, :integer}, {:list, :atom}) === false
+      assert TypeComparator.less_or_equal?({:list, :float}, {:list, :integer}) === false
+      assert TypeComparator.less_or_equal?({:list, :integer}, {:list, :atom}) === :error
     end
 
     test "returns true when all the elements of list1 are less or equal than list2" do
@@ -62,9 +65,9 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.less_or_equal?([:integer, :string], [:integer, :string]) === true
       assert TypeComparator.less_or_equal?([:integer, :string], [:float, :string]) === true
       assert TypeComparator.less_or_equal?([:integer, {:list, :integer}, :boolean], [:float, {:list, :float}, :boolean]) === true
-      assert TypeComparator.less_or_equal?([:integer, :string], [:float, :atom]) === false
+      assert TypeComparator.less_or_equal?([:integer, :string], [:float, :atom]) === :error
       assert TypeComparator.less_or_equal?([:float, :string], [:integer, :string]) === false
-      assert TypeComparator.less_or_equal?([:float, :string, :integer], [:float, :string]) === false
+      assert TypeComparator.less_or_equal?([:float, :string, :integer], [:float, :string]) === :error
     end
   end
 
@@ -77,12 +80,21 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater(:atom, :atom) === :atom
     end
 
-    test "returns nil when types are not comparable" do
-      assert TypeComparator.greater(:string, :boolean) === nil
-      assert TypeComparator.greater(:boolean, :integer) === nil
-      assert TypeComparator.greater(:integer, :atom) === nil
-      assert TypeComparator.greater({:tuple, [:integer]}, :float) === nil
-      assert TypeComparator.greater({:list, :string}, {:tuple, [:integer]}) === nil
+    test "returns error when types are not comparable" do
+      assert TypeComparator.greater(:string, :boolean) === :error
+      assert TypeComparator.greater(:boolean, :integer) === :error
+      assert TypeComparator.greater(:integer, :atom) === :error
+      assert TypeComparator.greater({:tuple, [:integer]}, :float) === :error
+      assert TypeComparator.greater({:list, :string}, {:tuple, [:integer]}) === :error
+    end
+
+    test "returns error when one of the type is already an error" do
+      assert TypeComparator.greater(:error, :boolean) === :error
+      assert TypeComparator.greater(:error, nil) === :error
+      assert TypeComparator.greater(nil, :error) === :error
+      assert TypeComparator.greater({:tuple, [:integer]}, :error) === :error
+      assert TypeComparator.greater({:tuple, [:integer]}, {:map, {:float, :error}}) === :error
+      assert TypeComparator.greater({:tuple, [:integer, :error]}, {:map, {:float, :string}}) === :error
     end
 
     test "returns float because is greater than integer" do
@@ -102,7 +114,7 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater({:map, {:integer, :string}}, {:map, {:integer, :string}}) === {:map, {:integer, :string}}
       assert TypeComparator.greater({:map, {:integer, :string}}, {:map, {:float, :string}}) === {:map, {:float, :string}}
       assert TypeComparator.greater({:map, {:integer, {:list, :integer}}}, {:map, {:float, {:list, :integer}}}) === {:map, {:float, {:list, :integer}}}
-      assert TypeComparator.greater({:map, {:integer, :string}}, {:map, {:float, :atom}}) === {:map, {:float, nil}}
+      assert TypeComparator.greater({:map, {:integer, :string}}, {:map, {:float, :atom}}) === {:map, {:float, :error}}
     end
 
     test "returns the greater type between two tuples" do
@@ -111,7 +123,7 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater({:tuple, [:integer, :string]}, {:tuple, [:integer, :string]}) === {:tuple, [:integer, :string]}
       assert TypeComparator.greater({:tuple, [:integer, :string]}, {:tuple, [:float, :string]}) === {:tuple, [:float, :string]}
       assert TypeComparator.greater({:tuple, [:integer, {:list, :integer}, :boolean]}, {:tuple, [:float, {:list, :float}, :boolean]}) === {:tuple, [:float, {:list, :float}, :boolean]}
-      assert TypeComparator.greater({:tuple, [:integer, :string]}, {:tuple, [:float, :atom]}) === {:tuple, [:float, nil]}
+      assert TypeComparator.greater({:tuple, [:integer, :string]}, {:tuple, [:float, :atom]}) === {:tuple, [:float, :error]}
     end
 
     test "returns the greater type between two lists" do
@@ -119,7 +131,7 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater({:list, :integer}, {:list, :integer}) === {:list, :integer}
       assert TypeComparator.greater({:list, :integer}, {:list, :float}) === {:list, :float}
       assert TypeComparator.greater({:list, {:list, :integer}}, {:list, {:list, :float}}) === {:list, {:list, :float}}
-      assert TypeComparator.greater({:list, :integer}, {:list, :atom}) === {:list, nil}
+      assert TypeComparator.greater({:list, :integer}, {:list, :atom}) === {:list, :error}
     end
 
     test "returns a list with the greater types of two lists" do
@@ -127,10 +139,10 @@ defmodule Typelixir.TypeComparatorTest do
       assert TypeComparator.greater([nil, nil], [:integer, :string]) === [:integer, :string]
       assert TypeComparator.greater([:integer, :string], [:integer, :string]) === [:integer, :string]
       assert TypeComparator.greater([:integer, :string], [:float, :string]) === [:float, :string]
-      assert TypeComparator.greater([:integer, :string], [:integer, :float]) === [:integer, nil]
+      assert TypeComparator.greater([:integer, :string], [:integer, :float]) === [:integer, :error]
       assert TypeComparator.greater([:integer, {:list, :integer}, :boolean], [:float, {:list, :float}, :boolean]) === [:float, {:list, :float}, :boolean]
-      assert TypeComparator.greater([:integer, :string], [:float, :atom]) === [:float, nil]
-      assert TypeComparator.greater([:float, :string, :integer], [:float, :string]) === nil
+      assert TypeComparator.greater([:integer, :string], [:float, :atom]) === [:float, :error]
+      assert TypeComparator.greater([:float, :string, :integer], [:float, :string]) === :error
     end
   end
 
@@ -190,65 +202,80 @@ defmodule Typelixir.TypeComparatorTest do
     end
   end
 
-  describe "int_to_float?" do
-    test "returns false when types are equal" do
-      assert TypeComparator.int_to_float?(:string, :string) === false
-      assert TypeComparator.int_to_float?(:boolean, :boolean) === false
-      assert TypeComparator.int_to_float?(:integer, :integer) === false
-      assert TypeComparator.int_to_float?(:float, :float) === false
-      assert TypeComparator.int_to_float?(:atom, :atom) === false
+  describe "float_to_int?" do
+    @env %{
+      vars: %{
+        a: :integer,
+        b: :float,
+        c: {:tuple, [{:list, :integer}, :string]},
+        d: {:list, :integer}
+      },
+      mod_funcs: %{
+        ModuleOne: %{
+          test: {:integer, [:integer]},
+          test2: {nil, [:integer]},
+        },
+        ModuleTwo: %{test: {:string, []}},
+        ModuleThree: %{}
+      }
+    }
+
+    test "returns false when literals are integer and float respectively" do
+      assert TypeComparator.float_to_int?(1, 2.4, @env) === true
+      assert TypeComparator.float_to_int?(34234, 34324.41142, @env) === true
+      assert TypeComparator.float_to_int?(23423, 234, @env) === false
+      assert TypeComparator.float_to_int?(14.578, 5857.245, @env) === false
+    end
+
+    test "returns false when variables are integer and float respectively" do
+      assert TypeComparator.float_to_int?({:a, [line: 7], nil}, {:b, [line: 7], nil}, @env) === true
+      assert TypeComparator.float_to_int?({:a, [line: 7], nil}, {:a, [line: 7], nil}, @env) === false
+      assert TypeComparator.float_to_int?({:b, [line: 7], nil}, {:b, [line: 7], nil}, @env) === false
     end
 
     test "returns false when types are not comparable" do
-      assert TypeComparator.int_to_float?(:string, :boolean) === false
-      assert TypeComparator.int_to_float?(:boolean, :integer) === false
-      assert TypeComparator.int_to_float?(:integer, :atom) === false
-      assert TypeComparator.int_to_float?({:tuple, [:integer]}, :float) === false
-      assert TypeComparator.int_to_float?({:list, :string}, {:tuple, [:integer]}) === false
-      assert TypeComparator.int_to_float?(nil, :integer) === false
-      assert TypeComparator.int_to_float?(nil, {:list, :string}) === false
+      assert TypeComparator.float_to_int?("a", true, @env) === false
+      assert TypeComparator.float_to_int?(false, 112, @env) === false
+      assert TypeComparator.float_to_int?(134, :a, @env) === false
+      assert TypeComparator.float_to_int?(nil, 123, @env) === false
+      assert TypeComparator.float_to_int?(false, nil, @env) === false
     end
 
-    test "returns true because the first type is integer and the second type is float" do
-      assert TypeComparator.int_to_float?(:integer, :float) === true
-      assert TypeComparator.int_to_float?(:float, :integer) === false
+    test "returns true when at least one type of list1 is integer and the corresponding type in list2 is float" do
+      assert TypeComparator.float_to_int?([], [], @env) === false
+      assert TypeComparator.float_to_int?([nil, nil], [2, 4], @env) === false
+      assert TypeComparator.float_to_int?([123, "a"], [432, "fdgh"], @env) === false
+      assert TypeComparator.float_to_int?([235, "c"], [568.422, "dhr"], @env) === true
+      assert TypeComparator.float_to_int?([346, [124314, 25425], true], [23593.2345, [143234.245, 345467.112], false], @env) === true
+      assert TypeComparator.float_to_int?([14, "sfg"], [1234.4, :cc], @env) === true
+      assert TypeComparator.float_to_int?([134, 567], [567567.576, 34543.534], @env) === true
+      assert TypeComparator.float_to_int?([23424.324, "Sg"], [234, "skdgj"], @env) === false
+      assert TypeComparator.float_to_int?([252.354, "ektiy", 4597], [579.345, "erg", 3496], @env) === false
     end
 
-    test "returns true when map1 key or value types are integer and map1 key or value types are float" do
-      assert TypeComparator.int_to_float?({:map, {nil, nil}}, {:map, {:integer, :string}}) === false
-      assert TypeComparator.int_to_float?({:map, {:integer, :string}}, {:map, {:integer, :string}}) === false
-      assert TypeComparator.int_to_float?({:map, {:integer, :string}}, {:map, {:float, :string}}) === true
-      assert TypeComparator.int_to_float?({:map, {:integer, {:list, :integer}}}, {:map, {:float, {:list, :integer}}}) === true
-      assert TypeComparator.int_to_float?({:map, {:integer, :string}}, {:map, {:float, :atom}}) === true
+    test "returns true when at least one type of tuple1 is integer and the corresponding type in tuple2 is float" do
+      assert TypeComparator.float_to_int?({}, {}, @env) === false
+      assert TypeComparator.float_to_int?({nil, nil}, {1, 2}, @env) === false
+      assert TypeComparator.float_to_int?({123, "a"}, {432, "fdgh"}, @env) === false
+      assert TypeComparator.float_to_int?({235, "c"}, {568.422, "dhr"}, @env) === true
+      assert TypeComparator.float_to_int?({:{}, [line: 7], [346, [124314, 25425], true]}, {:{}, [line: 7], [23593.2345, [143234.245, 345467.112], false]}, @env) === true
+      assert TypeComparator.float_to_int?({14, "sfg"}, {1234.4, :cc}, @env) === true
+      assert TypeComparator.float_to_int?({134, 567}, {567567.576, 34543.534}, @env) === true
+      assert TypeComparator.float_to_int?({23424.324, "Sg"}, {234, "skdgj"}, @env) === false
+      assert TypeComparator.float_to_int?({:{}, [line: 7], [252.354, "ektiy", 4597]}, {:{}, [line: 7], [579.345, "erg", 3496]}, @env) === false
     end
 
-    test "returns true when at least one type of tuple1 is integer and the type in tuple2 is float" do
-      assert TypeComparator.int_to_float?({:tuple, []}, {:tuple, []}) === false
-      assert TypeComparator.int_to_float?({:tuple, [nil, nil]}, {:tuple, [:integer, :string]}) === false
-      assert TypeComparator.int_to_float?({:tuple, [:integer, :string]}, {:tuple, [:integer, :string]}) === false
-      assert TypeComparator.int_to_float?({:tuple, [:integer, :string]}, {:tuple, [:float, :string]}) === true
-      assert TypeComparator.int_to_float?({:tuple, [:integer, {:list, :integer}, :boolean]}, {:tuple, [:float, {:list, :float}, :boolean]}) === true
-      assert TypeComparator.int_to_float?({:tuple, [:integer, :string]}, {:tuple, [:float, :atom]}) === true
-    end
-
-    test "returns true when some type of list1 is integer and the type in list2 is float" do
-      assert TypeComparator.int_to_float?({:list, nil}, {:list, nil}) === false
-      assert TypeComparator.int_to_float?({:list, :integer}, {:list, :integer}) === false
-      assert TypeComparator.int_to_float?({:list, :integer}, {:list, :float}) === true
-      assert TypeComparator.int_to_float?({:list, {:list, :integer}}, {:list, {:list, :float}}) === true
-      assert TypeComparator.int_to_float?({:list, :integer}, {:list, :atom}) === false
-    end
-
-    test "returns true when at least one type of list1 is integer and the type in list2 is float" do
-      assert TypeComparator.int_to_float?([], []) === false
-      assert TypeComparator.int_to_float?([nil, nil], [:integer, :string]) === false
-      assert TypeComparator.int_to_float?([:integer, :string], [:integer, :string]) === false
-      assert TypeComparator.int_to_float?([:integer, :string], [:float, :string]) === true
-      assert TypeComparator.int_to_float?([:integer, {:list, :integer}, :boolean], [:float, {:list, :float}, :boolean]) === true
-      assert TypeComparator.int_to_float?([:integer, :string], [:float, :atom]) === true
-      assert TypeComparator.int_to_float?([:integer, :integer], [:float, :float]) === true
-      assert TypeComparator.int_to_float?([:float, :string], [:integer, :string]) === false
-      assert TypeComparator.int_to_float?([:float, :string, :integer], [:float, :string]) === false
+    test "returns true when map1 key or value types are integer and the corresponding map2 key or value types are float" do
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], []}, {:%{}, [line: 7], []}, @env) === false
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{nil, nil}]}, {:%{}, [line: 7], [{1, 2}]}, @env) === false
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{123, "a"}]}, {:%{}, [line: 7], [{432, "fdgh"}]}, @env) === false
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{235, "c"}]}, {:%{}, [line: 7], [{568.422, "dhr"}]}, @env) === true
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{346, [124314, 25425]}, {12412, [123]}]}, {:%{}, [line: 7], [{23593.2345, [143234.245, 345467.112]}, {12412, [123]}]}, @env) === true
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{14, "sfg"}]}, {:%{}, [line: 7], [{1234.4, :cc}]}, @env) === true
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{"sfg", 14}]}, {:%{}, [line: 7], [{:cc, 1234.4}]}, @env) === true
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{134, 567}]}, {:%{}, [line: 7], [{567567.576, 34543.534}]}, @env) === true
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{23424.324, "Sg"}]}, {:%{}, [line: 7], [{234, "skdgj"}]}, @env) === false
+      assert TypeComparator.float_to_int?({:%{}, [line: 7], [{252.354, "ektiy"}, {4597, "Asd"}]}, {:%{}, [line: 7], [{579.345, "erg"}, {3496.123, ":sd"}]}, @env) === true
     end
   end
 end
