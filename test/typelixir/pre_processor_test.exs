@@ -26,17 +26,7 @@ defmodule Typelixir.PreProcessorTest do
 
     test "returns empty when there is no module or code defined on the file" do
       File.write("test/tmp/example.ex", "")
-      assert PreProcessor.process_file("#{@test_dir}/example.ex", @env) 
-        === %{
-          ModuleOne: %{
-            test: {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
-            test2: {nil, []},
-            test3: {nil, [:integer]}
-          },
-          ModuleThree: %{
-            test: {:string, [:integer, :string]}
-          }
-        }
+      assert PreProcessor.process_file("#{@test_dir}/example.ex", @env) === @env
     end
 
     test "returns the module name with the functions defined" do
@@ -45,25 +35,17 @@ defmodule Typelixir.PreProcessorTest do
         end
       ")
       assert PreProcessor.process_file("#{@test_dir}/example.ex", @env) 
-        === %{
-          ModuleOne: %{
-            test: {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
-            test2: {nil, []},
-            test3: {nil, [:integer]}
-          },
-          ModuleThree: %{
-            test: {:string, [:integer, :string]}
-          },
-          Example: %{}
-        }
+        === 
+          %{ModuleOne: %{test: {{:tuple, [{:list, :integer}, :string]}, 
+          [{:list, :integer}, :string]}, test2: {nil, []}, test3: {nil, [:integer]}}, 
+          ModuleThree: %{test: {:string, [:integer, :string]}}, Example: %{}}
 
       File.write("test/tmp/example.ex", "
         defmodule Example do
-          use Type
-          typedfunc example, [integer, boolean], float
-          typedfunc example2, [], integer
-          typedfunc example3, [integer], _
-          typedfunc example4, [(list integer), (tuple [float, string])], (tuple [float, string])
+          @spec example(integer, boolean) :: float
+          @spec example2() :: integer
+          @spec example3(integer) :: nil
+          @spec example4([integer], {float, string}) :: {float, string}
         end
       ")
       assert PreProcessor.process_file("#{@test_dir}/example.ex", @env) 
