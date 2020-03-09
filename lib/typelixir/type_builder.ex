@@ -61,6 +61,7 @@ defmodule Typelixir.TypeBuilder do
   # Literals
   def build(value, _env) do
     cond do
+      value === nil -> nil
       is_boolean(value) -> :boolean
       is_bitstring(value) -> :string
       is_integer(value) -> :integer

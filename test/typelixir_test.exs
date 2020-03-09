@@ -28,7 +28,7 @@ defmodule TypelixirTest do
       assert Typelixir.check(["#{@test_dir}/example.ex"]) === :ok
     end
 
-    test "returns :ok when a file is well compiled and does not use Type library" do
+    test "returns :ok when a file is well compiled" do
       File.write("test/tmp/example.ex", "
         defmodule Example do
           a = 1
@@ -37,26 +37,14 @@ defmodule TypelixirTest do
       assert Typelixir.check(["#{@test_dir}/example.ex"]) === :ok
     end
 
-    test "returns :ok when a file is well compiled and use Type library" do
-      File.write("test/tmp/example.ex", "
-        defmodule Example do
-          use Type
-          integer a
-        end
-      ")
-      assert Typelixir.check(["#{@test_dir}/example.ex"]) === :ok
-    end
-
     test "returns :ok when the modules are well compiled and imported from others" do
       File.write("test/tmp/example.ex", "
         defmodule Example do
-          use Type
           import Example2
         end
       ")
       File.write("test/tmp/example2.ex", "
         defmodule Example2 do
-          use Type
           b = 3
         end
       ")
@@ -71,9 +59,7 @@ defmodule TypelixirTest do
     test "returns :error when a file is not well compiled by Typelixir" do
       File.write("test/tmp/example.ex", "
         defmodule Example do
-          use Type
-
-          typedfunc test, [integer], (list integer)
+          @spec test(integer) :: [integer]
           def test(int) do
             [int]
           end

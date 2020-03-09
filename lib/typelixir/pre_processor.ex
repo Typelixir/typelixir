@@ -27,9 +27,7 @@ defmodule Typelixir.PreProcessor do
   # FUNCTIONS
   # ---------------------------------------------------------------------------------------------------
 
-  # {:@, _, [{:spec, _, [{:::, _, [{fn_name, _, [type_of_args]}, type_of_return]}]}]}
-  # {:typedfunc, _, [{fn_name, _, _}, args, type_of_return]}
-  defp pre_process({:typedfunc, _, [{fn_name, _, _}, type_of_args, type_of_return]} = elem, env) do
+  defp pre_process({:@, _, [{:spec, _, [{:::, _, [{fn_name, _, type_of_args}, type_of_return]}]}]} = elem, env) do
     type_of_args = Enum.map(type_of_args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) end)
     fn_type = {TypeBuilder.build(type_of_return, %{vars: env[:vars], mod_funcs: env[:modules_functions]}), type_of_args}
 
