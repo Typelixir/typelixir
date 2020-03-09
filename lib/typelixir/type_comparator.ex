@@ -123,4 +123,28 @@ defmodule Typelixir.TypeComparator do
   end
 
   def float_to_int?(_, _, _), do: false
+
+  # ---------------------------------------------------------------------------------------------------
+  
+  # float_to_int_type? returns true if op1 has type integer and op2 has type float because means that
+  # we are binding a float to an integer and that is an error
+  
+  def float_to_int_type?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
+    if (length(list_type1) === length(list_type2)), 
+      do: (Enum.zip(list_type1, list_type2)
+          |> Enum.map(fn {type1, type2} -> float_to_int_type?(type1, type2) end)
+          |> Enum.member?(true)),
+      else: false
+  end
+  
+  def float_to_int_type?({:map, {key_type1, value_type1}}, {:map, {key_type2, value_type2}}), 
+    do: float_to_int_type?(key_type1, key_type2) or float_to_int_type?(value_type1, value_type2)
+
+  def float_to_int_type?({:tuple, list_type1}, {:tuple, list_type2}), do: float_to_int_type?(list_type1, list_type2)
+
+  def float_to_int_type?({:list, type1}, {:list, type2}), do: float_to_int_type?(type1, type2)
+
+  def float_to_int_type?(:integer, :float), do: true
+  
+  def float_to_int_type?(_, _), do: false
 end
