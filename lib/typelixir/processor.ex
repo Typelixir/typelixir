@@ -43,12 +43,21 @@ defmodule Typelixir.Processor do
       type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_name: env[:module_name], mod_funcs: env[:modules_functions]}) end)
       type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)
 
-      case TypeComparator.has_type?(type_of_args_caller, :error) or
-            TypeComparator.has_type?(type_of_args_callee, :error) or
-            TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) === :error or
-            not TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) do
+      case TypeComparator.has_type?(type_of_args_caller, :error) or 
+            TypeComparator.has_type?(type_of_args_callee, :error) or 
+            (TypeComparator.has_type?(type_of_args_caller, :float) and 
+            TypeComparator.float_to_int_type?(type_of_args_callee, type_of_args_caller)) or
+            TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) === :error do
         true -> {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
-        _ -> {elem, env}
+        _ -> 
+          case TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) do
+            true -> {elem, env}
+            _ -> 
+              case TypeComparator.has_type?(type_of_args_callee, nil) do
+                true -> {elem, env}
+                _ -> {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
+              end
+          end
       end
     else 
       {elem, env}
