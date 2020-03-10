@@ -106,6 +106,12 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === :integer
       assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2.4, 2]}, @env) === :float
 
+      assert TypeBuilder.build({:-, [line: 41], [1]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [{:a, [line: 41], nil}]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [{:+, [line: 41], [{:a, [line: 41], nil}, 1.2]}]}, @env) === :float
+      assert TypeBuilder.build({:-, [line: 41], [{:*, [line: 41], [{:z, [line: 41], nil}, false, 2]}]}, @env) === :error
+      assert TypeBuilder.build({:-, [line: 41], [{:+, [line: 41], [{:z, [line: 41], nil}, 2]}]}, @env) === :integer
+
       assert TypeBuilder.build({:and, [line: 41], [true, true]}, @env) === :boolean
       assert TypeBuilder.build({:or, [line: 41], [{:e, [line: 41], nil}, false]}, @env) === :boolean
       assert TypeBuilder.build({:and, [line: 41], [{:e, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :boolean

@@ -130,6 +130,21 @@ defmodule Typelixir.Processor do
     end
   end
 
+  # Neg
+  defp process({:-, [line: line], [operand]} = elem, env) do
+    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand, :error) or  
+          (not (TypeComparator.less_or_equal?(type_operand, :float))) do
+      true -> {elem, %{env | state: :error, data: {line, "Type error on - operator"}}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand, nil) do
+          true -> {elem, %{env | data: env[:data] ++ [{line, "Argument of - doesn't have a defined type"}]}}
+          _ -> {elem, env}
+        end
+    end
+  end
+
   # BOOLEAN OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
