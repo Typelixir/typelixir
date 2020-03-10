@@ -36,6 +36,11 @@ defmodule Typelixir.TypeBuilder do
     end
   end
 
+  # Operators
+  def build({operator, _, operands}, env) when (operator in [:*, :+, :/, :-, :and, :or, :not]) do
+    Enum.map(operands, fn t -> build(t, env) end) |> Enum.reduce(fn acc, e -> TypeComparator.greater(acc, e) end)
+  end
+
   # Variables or function defined on the compiling module
   def build({type, _, _}, env) do
     case env[:vars][type] do
@@ -46,11 +51,6 @@ defmodule Typelixir.TypeBuilder do
         end
       type -> type
     end
-  end
-  # Number operators
-  def build({operator, _, operands}, env) when (operator in [:*, :+, :/, :-, :and, :or, :not]) do
-    Enum.map(operands, fn t -> build(t, env) end) |> Enum.reduce(fn acc, e -> 
-      if e === nil, do: e, else: TypeComparator.greater(acc, e) end)
   end
 
   # Literal List

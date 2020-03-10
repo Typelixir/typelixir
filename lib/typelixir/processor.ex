@@ -113,8 +113,11 @@ defmodule Typelixir.Processor do
     type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
     type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
 
-    case TypeComparator.less_or_equal?(type_operand1, :float) and TypeComparator.less_or_equal?(type_operand2, :float) do
-      false -> {elem, %{env | state: :error, data: {line, "Type error on #{Atom.to_string(operator)} operator"}}}
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :float) and 
+            TypeComparator.less_or_equal?(type_operand2, :float))) do
+      true -> {elem, %{env | state: :error, data: {line, "Type error on #{Atom.to_string(operator)} operator"}}}
       _ -> 
         case TypeComparator.has_type?(type_operand1, nil) do
           true -> {elem, %{env | data: env[:data] ++ [{line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type"}]}}
@@ -134,8 +137,11 @@ defmodule Typelixir.Processor do
     type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
     type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
 
-    case TypeComparator.less_or_equal?(type_operand1, :boolean) and TypeComparator.less_or_equal?(type_operand2, :boolean) do
-      false -> {elem, %{env | state: :error, data: {line, "Type error on #{Atom.to_string(operator)} operator"}}}
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :boolean) and 
+            TypeComparator.less_or_equal?(type_operand2, :boolean))) do
+      true -> {elem, %{env | state: :error, data: {line, "Type error on #{Atom.to_string(operator)} operator"}}}
       _ -> 
         case TypeComparator.has_type?(type_operand1, nil) do
           true -> {elem, %{env | data: env[:data] ++ [{line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type"}]}}
@@ -152,8 +158,9 @@ defmodule Typelixir.Processor do
   defp process({:not, [line: line], [operand]} = elem, env) do
     type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
 
-    case TypeComparator.less_or_equal?(type_operand, :boolean) do
-      false -> {elem, %{env | state: :error, data: {line, "Type error on not operator"}}}
+    case TypeComparator.has_type?(type_operand, :error) or  
+          (not (TypeComparator.less_or_equal?(type_operand, :boolean))) do
+      true -> {elem, %{env | state: :error, data: {line, "Type error on not operator"}}}
       _ -> 
         case TypeComparator.has_type?(type_operand, nil) do
           true -> {elem, %{env | data: env[:data] ++ [{line, "Argument of not doesn't have a defined type"}]}}
