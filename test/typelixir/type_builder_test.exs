@@ -123,6 +123,18 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false, 2]}]}, @env) === :error
       assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false]}]}, @env) === :boolean
     end
+
+    test "returns type from comparison operators" do
+      assert TypeBuilder.build({:==, [line: 41], [1, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:!=, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:>=, [line: 41], [2.3, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:>, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:===, [line: 41], [{:z, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :boolean
+      assert TypeBuilder.build({:!==, [line: 41], ["a", 3]}, @env) === :error
+      assert TypeBuilder.build({:<=, [line: 41], [:test, [{3, false}]]}, @env) === :error
+      assert TypeBuilder.build({:==, [line: 41], [{:<, [line: 41], [{:e, [line: 41], nil}, true]}, false]}, @env) === :boolean
+      assert TypeBuilder.build({:<, [line: 41], [{:!=, [line: 41], [{:e, [line: 41], nil}, true]}, 2]}, @env) === :error
+    end
   end
 
   describe "add_variables" do
