@@ -7,7 +7,7 @@ defmodule Typelixir do
     modules_paths = ModuleNamesExtractor.extract_modules_names(all_paths)
     states = compile_files(all_paths, [], modules_paths, Map.new())
     Enum.each(states, fn state -> print_state(state) end)
-    case Enum.filter(states, fn {_, status, _} -> status == :error end) do
+    case Enum.filter(states, fn {_, status, _} -> status === :error end) do
       [] -> :ok
       errors -> {:error, Enum.map(errors, fn {path, _, error} -> "#{elem(error, 1)} in #{path}:#{elem(error, 0)}" end)}
     end
@@ -32,7 +32,9 @@ defmodule Typelixir do
   defp compile_file(path, modules_functions) do
     env = %{
       state: :ok,
-      data: [],
+      error_data: %{},
+      warnings: %{},
+      data: %{},
       module_name: :empty,
       vars: %{},
       modules_functions: modules_functions
@@ -47,7 +49,7 @@ defmodule Typelixir do
   end
 
   defp print_state({path, :ok, warnings}) do
-    Enum.each(warnings, fn warning -> IO.puts "#{IO.ANSI.yellow()}warning:#{IO.ANSI.white()} #{elem(warning, 1)} \n\s\s#{path}:#{elem(warning, 0)}\n" end)
+    Enum.each(Map.to_list(warnings), fn warning -> IO.puts "#{IO.ANSI.yellow()}warning:#{IO.ANSI.white()} #{elem(warning, 1)} \n\s\s#{path}:#{elem(warning, 0)}\n" end)
   end
 
   defp print_state({path, :error, error}) do
