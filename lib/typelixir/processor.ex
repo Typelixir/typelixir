@@ -264,6 +264,30 @@ defmodule Typelixir.Processor do
     end
   end
 
+  # STRING OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({:<>, [line: line], [operand1, operand2]} = elem, env) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :string) and 
+            TypeComparator.less_or_equal?(type_operand2, :string))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on <> operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of <> doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of <> doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
   # BASE CASE
   # ---------------------------------------------------------------------------------------------------
 

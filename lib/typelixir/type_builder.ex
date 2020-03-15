@@ -2,7 +2,7 @@ defmodule Typelixir.TypeBuilder do
 
   alias Typelixir.TypeComparator
 
-  @operators [:*, :+, :/, :-, :and, :or, :not, :++, :--]
+  @operators [:*, :+, :/, :-, :and, :or, :not, :++, :--, :<>]
   @comparison_operators [:==, :!=, :===, :!==, :>, :<, :>=, :<=]
 
   def build({:list, _, [type]}, env), do: {:list, build(type, env)}

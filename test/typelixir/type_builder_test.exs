@@ -136,6 +136,12 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:--, [line: 41], [[{:e, [line: 41], nil}, "a"], [false]]}, @env) === {:list, :error}
       assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}, 2], [4, 10]]}, @env) === {:list, :integer}
       assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}], [234.34]]}, @env) === {:list, :float}
+
+      assert TypeBuilder.build({:<>, [line: 41], ["a", "a"]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, "c"]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, {:e, [line: 41], nil}, 2]}, @env) === :error
+      assert TypeBuilder.build({:<>, [line: 41], ["a", 2]}, @env) === :error
     end
 
     test "returns type from comparison operators" do
