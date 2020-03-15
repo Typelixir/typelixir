@@ -8,7 +8,8 @@ defmodule Typelixir.TypeBuilderTest do
         a: :integer,
         b: :string,
         c: {:tuple, [{:list, :integer}, :string]},
-        d: {:list, :integer}
+        d: {:list, :integer},
+        e: :boolean
       },
       mod_name: :ModuleOne,
       mod_funcs: %{
@@ -95,6 +96,64 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne]}, :test2]}, [line: 7], [1]}, @env) === nil
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo]}, :test]}, [line: 7], [1]}, @env) === :string
       assert TypeBuilder.build({{:., [line: 7], [{:__aliases__, [line: 7], [:ModuleOne, :ModuleTwo, :ModuleThree]}, :test]}, [line: 7], [1]}, @env) === nil
+    end
+
+    test "returns type from operators" do
+      assert TypeBuilder.build({:+, [line: 41], [1, 2]}, @env) === :integer
+      assert TypeBuilder.build({:*, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [2.3, 2]}, @env) === :float
+      assert TypeBuilder.build({:/, [line: 41], [2, 2, 2.4]}, @env) === :float
+      assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === :integer
+      assert TypeBuilder.build({:+, [line: 41], [{:z, [line: 41], nil}, 2.4, 2]}, @env) === :float
+
+      assert TypeBuilder.build({:-, [line: 41], [1]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [{:a, [line: 41], nil}]}, @env) === :integer
+      assert TypeBuilder.build({:-, [line: 41], [{:+, [line: 41], [{:a, [line: 41], nil}, 1.2]}]}, @env) === :float
+      assert TypeBuilder.build({:-, [line: 41], [{:*, [line: 41], [{:z, [line: 41], nil}, false, 2]}]}, @env) === :error
+      assert TypeBuilder.build({:-, [line: 41], [{:+, [line: 41], [{:z, [line: 41], nil}, 2]}]}, @env) === :integer
+
+      assert TypeBuilder.build({:and, [line: 41], [true, true]}, @env) === :boolean
+      assert TypeBuilder.build({:or, [line: 41], [{:e, [line: 41], nil}, false]}, @env) === :boolean
+      assert TypeBuilder.build({:and, [line: 41], [{:e, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :boolean
+      assert TypeBuilder.build({:and, [line: 41], [{:e, [line: 41], nil}, {:z, [line: 41], nil}, 2]}, @env) === :error
+
+      assert TypeBuilder.build({:not, [line: 41], [true]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:e, [line: 41], nil}]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:e, [line: 41], nil}, true]}]}, @env) === :boolean
+      assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false, 2]}]}, @env) === :error
+      assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false]}]}, @env) === :boolean
+
+      assert TypeBuilder.build({:++, [line: 41], [[true], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [[{:e, [line: 41], nil}, false], [true]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [[1, false], [4, 5]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [[false], [1.4, 2]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [{:++, [line: 41], [[{:e, [line: 41], nil}, true], [false]]}]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [{:++, [line: 41], [[{:z, [line: 41], nil}, false], [2]]}]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [{:--, [line: 41], [[{:z, [line: 41], nil}], [false]]}]}, @env) === {:list, :boolean}
+
+      assert TypeBuilder.build({:--, [line: 41], [[true], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:--, [line: 41], [[{:e, [line: 41], nil}, false], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:--, [line: 41], [[{:e, [line: 41], nil}, "a"], [false]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}, 2], [4, 10]]}, @env) === {:list, :integer}
+      assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}], [234.34]]}, @env) === {:list, :float}
+
+      assert TypeBuilder.build({:<>, [line: 41], ["a", "a"]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, "c"]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :string
+      assert TypeBuilder.build({:<>, [line: 41], [{:b, [line: 41], nil}, {:e, [line: 41], nil}, 2]}, @env) === :error
+      assert TypeBuilder.build({:<>, [line: 41], ["a", 2]}, @env) === :error
+    end
+
+    test "returns type from comparison operators" do
+      assert TypeBuilder.build({:==, [line: 41], [1, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:!=, [line: 41], [{:a, [line: 41], nil}, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:>=, [line: 41], [2.3, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:>, [line: 41], [{:z, [line: 41], nil}, 2]}, @env) === :boolean
+      assert TypeBuilder.build({:===, [line: 41], [{:z, [line: 41], nil}, {:z, [line: 41], nil}]}, @env) === :boolean
+      assert TypeBuilder.build({:!==, [line: 41], ["a", 3]}, @env) === :error
+      assert TypeBuilder.build({:<=, [line: 41], [:test, [{3, false}]]}, @env) === :error
+      assert TypeBuilder.build({:==, [line: 41], [{:<, [line: 41], [{:e, [line: 41], nil}, true]}, false]}, @env) === :boolean
+      assert TypeBuilder.build({:<, [line: 41], [{:!=, [line: 41], [{:e, [line: 41], nil}, true]}, 2]}, @env) === :error
     end
   end
 

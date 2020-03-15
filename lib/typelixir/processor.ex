@@ -15,13 +15,18 @@ defmodule Typelixir.Processor do
     IO.inspect ast
     
     {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: modules_functions}, &process(&1, &2))
-    result
+
+    case result[:state] do
+      :error ->
+        data_merged = Enum.reduce(Map.to_list(result[:error_data]), fn acc, e -> if elem(acc, 0) < elem(e, 0), do: acc, else: e end)
+        %{result | data: data_merged}
+      :ok -> %{result | data: result[:warnings]}
+      _ -> result
+    end
   end
 
-  # HANDLE ERROR / NEEDS COMPILE
+  # NEEDS COMPILE
   # ---------------------------------------------------------------------------------------------------
-
-  defp process(elem, %{:state => :error, :data => _, :module_name => _, :vars => _, :modules_functions => _} = env), do: {elem, env}
 
   defp process(elem, %{:state => :needs_compile, :data => _, :module_name => _, :vars => _, :modules_functions => _} = env), do: {elem, env}
 
@@ -48,14 +53,14 @@ defmodule Typelixir.Processor do
             (TypeComparator.has_type?(type_of_args_caller, :float) and 
             TypeComparator.float_to_int_type?(type_of_args_callee, type_of_args_caller)) or
             TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) === :error do
-        true -> {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
+        true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on function call #{mod_name}.#{fn_name}")}}
         _ -> 
           case TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) do
             true -> {elem, env}
             _ -> 
               case TypeComparator.has_type?(type_of_args_callee, nil) do
                 true -> {elem, env}
-                _ -> {elem, %{env | state: :error, data: {line, "Type error on function call #{mod_name}.#{fn_name}"}}}
+                _ -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on function call #{mod_name}.#{fn_name}")}}
               end
           end
       end
@@ -88,13 +93,13 @@ defmodule Typelixir.Processor do
           TypeComparator.has_type?(type_operand2, :error) or 
           (TypeComparator.has_type?(type_operand2, :float) and 
             TypeComparator.float_to_int?(operand1, operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})) do
-      true -> {elem, %{env | state: :error, data: {line, "Type error on = operator"}}}
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on = operator")}}
       _ -> 
         case TypeComparator.less_or_equal?(type_operand2, type_operand1) do
-          :error -> {elem, %{env | state: :error, data: {line, "Type error on = operator"}}}
+          :error -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on = operator")}}
           true -> 
             case TypeComparator.has_type?(type_operand2, nil) do
-              true -> {elem, %{env | data: env[:data] ++ [{line, "Right side of = doesn't have a defined type"}]}}
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of = doesn't have a defined type")}}
               _ -> 
                 vars = TypeBuilder.add_variables(operand1, type_operand1, operand2, type_operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
                 {elem, %{env | vars: vars}}
@@ -102,6 +107,183 @@ defmodule Typelixir.Processor do
           _ ->
             vars = TypeBuilder.add_variables(operand1, type_operand1, operand2, type_operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
             {elem, %{env | vars: vars}}
+        end
+    end
+  end
+
+  # NUMBER OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:*, :+, :/, :-]) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :float) and 
+            TypeComparator.less_or_equal?(type_operand2, :float))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on #{Atom.to_string(operator)} operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
+  # Neg
+  defp process({:-, [line: line], [operand]} = elem, env) do
+    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand, :error) or  
+          (not (TypeComparator.less_or_equal?(type_operand, :float))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on - operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Argument of - doesn't have a defined type")}}
+          _ -> {elem, env}
+        end
+    end
+  end
+
+  # BOOLEAN OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:and, :or]) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :boolean) and 
+            TypeComparator.less_or_equal?(type_operand2, :boolean))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on #{Atom.to_string(operator)} operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
+  # Not
+  defp process({:not, [line: line], [operand]} = elem, env) do
+    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand, :error) or  
+          (not (TypeComparator.less_or_equal?(type_operand, :boolean))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on not operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Argument of not doesn't have a defined type")}}
+          _ -> {elem, env}
+        end
+    end
+  end
+
+  # COMPARISON OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:==, :!=, :>, :<, :<=, :>=, :===, :!==]) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error or
+          (not (TypeComparator.less_or_equal?(type_operand1, type_operand2) or 
+          TypeComparator.less_or_equal?(type_operand2, type_operand1))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on #{Atom.to_string(operator)} operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
+  # LIST OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  # Concat
+  defp process({:++, [line: line], [operand1, operand2]} = elem, env) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on ++ operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of ++ doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of ++ doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
+        end
+    end
+  end
+
+  # Diff
+  defp process({:--, [line: line], [operand1, operand2]} = elem, env) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on -- operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of -- doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of -- doesn't have a defined type")}}
+              _ -> 
+                case TypeComparator.less_or_equal?(type_operand1, type_operand2) and 
+                      TypeComparator.less_or_equal?(type_operand2, type_operand1) do
+                  true -> {elem, env}
+                  _ -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on -- operator")}}
+                end
+            end
+        end
+    end
+  end
+
+  # STRING OPERATORS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({:<>, [line: line], [operand1, operand2]} = elem, env) do
+    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+
+    case TypeComparator.has_type?(type_operand1, :error) or 
+          TypeComparator.has_type?(type_operand2, :error) or 
+          (not (TypeComparator.less_or_equal?(type_operand1, :string) and 
+            TypeComparator.less_or_equal?(type_operand2, :string))) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on <> operator")}}
+      _ -> 
+        case TypeComparator.has_type?(type_operand1, nil) do
+          true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Left side of <> doesn't have a defined type")}}
+          _ -> 
+            case TypeComparator.has_type?(type_operand2, nil) do
+              true -> {elem, %{env | warnings: Map.put(env[:warnings], line, "Right side of <> doesn't have a defined type")}}
+              _ -> {elem, env}
+            end
         end
     end
   end

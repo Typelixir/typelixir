@@ -2,6 +2,9 @@ defmodule Typelixir.TypeBuilder do
 
   alias Typelixir.TypeComparator
 
+  @operators [:*, :+, :/, :-, :and, :or, :not, :++, :--, :<>]
+  @comparison_operators [:==, :!=, :===, :!==, :>, :<, :>=, :<=]
+
   def build({:list, _, [type]}, env), do: {:list, build(type, env)}
 
   def build({:tuple, _, [types_list]}, env), do: {:tuple, Enum.map(types_list, fn type -> build(type, env) end)}
@@ -33,6 +36,20 @@ defmodule Typelixir.TypeBuilder do
     case type do
       nil -> nil
       _ -> elem(type, 0)
+    end
+  end
+
+  # Operators
+  def build({operator, _, operands}, env) when (operator in @operators) do
+    Enum.map(operands, fn t -> build(t, env) end) |> Enum.reduce(fn acc, e -> TypeComparator.greater(acc, e) end)
+  end
+
+  # Comparison perators
+  def build({operator, _, operands}, env) when (operator in @comparison_operators) do
+    type_comparison = Enum.map(operands, fn t -> build(t, env) end) |> Enum.reduce(fn acc, e -> TypeComparator.greater(acc, e) end)
+    case type_comparison do
+      :error -> :error
+      _ -> :boolean
     end
   end
 
