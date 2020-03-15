@@ -122,6 +122,20 @@ defmodule Typelixir.TypeBuilderTest do
       assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:e, [line: 41], nil}, true]}]}, @env) === :boolean
       assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false, 2]}]}, @env) === :error
       assert TypeBuilder.build({:not, [line: 41], [{:and, [line: 41], [{:z, [line: 41], nil}, false]}]}, @env) === :boolean
+
+      assert TypeBuilder.build({:++, [line: 41], [[true], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [[{:e, [line: 41], nil}, false], [true]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [[1, false], [4, 5]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [[false], [1.4, 2]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [{:++, [line: 41], [[{:e, [line: 41], nil}, true], [false]]}]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:++, [line: 41], [{:++, [line: 41], [[{:z, [line: 41], nil}, false], [2]]}]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:++, [line: 41], [{:--, [line: 41], [[{:z, [line: 41], nil}], [false]]}]}, @env) === {:list, :boolean}
+
+      assert TypeBuilder.build({:--, [line: 41], [[true], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:--, [line: 41], [[{:e, [line: 41], nil}, false], [false]]}, @env) === {:list, :boolean}
+      assert TypeBuilder.build({:--, [line: 41], [[{:e, [line: 41], nil}, "a"], [false]]}, @env) === {:list, :error}
+      assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}, 2], [4, 10]]}, @env) === {:list, :integer}
+      assert TypeBuilder.build({:--, [line: 41], [[{:z, [line: 41], nil}], [234.34]]}, @env) === {:list, :float}
     end
 
     test "returns type from comparison operators" do
