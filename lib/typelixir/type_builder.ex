@@ -2,6 +2,9 @@ defmodule Typelixir.TypeBuilder do
 
   alias Typelixir.TypeComparator
 
+  # ---------------------------------------------------------------------------------------------------
+  # build -> returns the type of any expression
+
   @operators [:*, :+, :/, :-, :and, :or, :not, :++, :--, :<>]
   @comparison_operators [:==, :!=, :===, :!==, :>, :<, :>=, :<=]
 
@@ -89,6 +92,7 @@ defmodule Typelixir.TypeBuilder do
   end
 
   # ---------------------------------------------------------------------------------------------------
+  # add_variables -> returns a new environment with the vars of pattern1 and the types of pattern2 (used by binding)
 
   def add_variables(_, _, _, nil, env), do: env[:vars]
 

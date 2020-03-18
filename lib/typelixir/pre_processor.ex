@@ -3,6 +3,8 @@ defmodule Typelixir.PreProcessor do
 
   alias Typelixir.{TypeBuilder}
 
+  # extends the given map with the module name as key and the typed functions it defines as value
+
   def process_file(path, modules_functions) do 
     ast = Code.string_to_quoted(File.read!(Path.absname(path)))
     env = %{
