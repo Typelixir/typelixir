@@ -249,5 +249,62 @@ defmodule Typelixir.TypeBuilderTest do
         %{a: :integer, b: :string, c: {:tuple, [{:list, :integer}, :string]}, d: {:list, :integer}, y: {:list, :integer}, z: {:list, :integer}}
     end
   end
+
+  describe "get_new_vars_env" do
+    test "returns error when variables doesn't match with the corresponding type" do
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}], [nil])
+        === %{}
+      
+        assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}], [])
+        === %{}
+
+      assert TypeBuilder.get_new_vars_env([[{:x, [line: 10], nil}, {:z, [line: 10], nil}]], [:integer])
+        === :error
+
+      assert TypeBuilder.get_new_vars_env([{{:x, [line: 10], nil}, {:z, [line: 10], nil}}, {:y, [line: 10], nil}],
+        [:float, :integer])
+          === :error
+      
+      assert TypeBuilder.get_new_vars_env([{{:x, [line: 10], nil}, {:z, [line: 10], nil}}, {:y, [line: 10], nil}],
+        [{:list, :float}, :integer])
+          === :error
+
+      assert TypeBuilder.get_new_vars_env([{:%{}, [line: 10], [{1, {:y, [line: 10], nil}}]}], [{:tuple, [:integer, :string]}])
+        === :error
+
+      assert TypeBuilder.get_new_vars_env([{:%{}, [line: 10], [{1, {:y, [line: 10], nil}}]}], [:atom])
+        === :error
+    end
+
+    test "returns variables with the corresponding type" do
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}], [:integer])
+        === %{x: :integer}
+      
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}], [nil])
+        === %{}
+
+      assert TypeBuilder.get_new_vars_env([{:a, [line: 10], nil}], [:boolean])
+        === %{a: :boolean}
+
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}], [{:tuple, [{:list, :integer}, :string]}])
+        === %{x: {:tuple, [{:list, :integer}, :string]}}
+
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}, {:z, [line: 10], nil}], [:integer, :float])
+        === %{x: :integer, z: :float}
+
+      assert TypeBuilder.get_new_vars_env([[{:x, [line: 10], nil}, {:z, [line: 10], nil}]], [{:list, :float}])
+        === %{x: :float, z: :float}
+
+      assert TypeBuilder.get_new_vars_env([{{:x, [line: 10], nil}, {:z, [line: 10], nil}}, {:y, [line: 10], nil}],
+        [{:tuple, [{:tuple, [{:list, :integer}, :string]}, :float]}, :integer])
+          === %{x: {:tuple, [{:list, :integer}, :string]}, y: :integer, z: :float}
+
+      assert TypeBuilder.get_new_vars_env([{:x, [line: 10], nil}, {:z, [line: 10], nil}], [{:map, {:integer, :string}}, :float])
+        === %{x: {:map, {:integer, :string}}, z: :float}
+
+      assert TypeBuilder.get_new_vars_env([{:%{}, [line: 10], [{1, {:y, [line: 10], nil}}]}], [{:map, {:integer, :string}}])
+        === %{y: :string}
+    end
+  end
 end
   

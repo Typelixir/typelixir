@@ -130,4 +130,43 @@ defmodule Typelixir.TypeBuilder do
   end
 
   def add_variables(_, _, _, _, env), do: env[:vars]
+
+  # ---------------------------------------------------------------------------------------------------
+  # get_new_vars_env -> returns a new map with the vars of params and the corresponding types of 
+  # param_type_list (used by function definition)
+
+  def get_new_vars_env(params, param_type_list) do
+    new_vars = Enum.zip(params, param_type_list) |> Enum.map(fn {var, type} -> get_new_vars(var, type) end) |> List.flatten()
+    case Enum.member?(new_vars, :error) do
+      true -> :error
+      _ -> 
+        Enum.reduce(new_vars, %{}, fn {var, type}, acc -> Map.put(acc, var, type) end)
+    end
+  end
+
+  # List
+  defp get_new_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_new_vars(x, type) end)
+
+  defp get_new_vars(_, nil), do: []
+
+  defp get_new_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
+
+  # Tuple
+  defp get_new_vars({:{}, _, ops}, {:tuple, type_list}) do 
+    if length(ops) === length(type_list), do: Enum.zip(ops, type_list) |> Enum.map(fn {var, type} -> get_new_vars(var, type) end),
+    else: :error
+  end
+
+  defp get_new_vars(ops, {:tuple, type_list}) do
+    ops = Tuple.to_list(ops)
+    if length(ops) === length(type_list), do: Enum.zip(ops, type_list) |> Enum.map(fn {var, type} -> get_new_vars(var, type) end),
+    else: :error
+  end
+
+  # Map
+  defp get_new_vars({:%{}, _, op}, {:map, {_, value_type}}) do
+    (Enum.map(op, fn {_, value} -> value end) |> Enum.map(fn x -> get_new_vars(x, value_type) end))
+  end
+
+  defp get_new_vars(_, _), do: :error
 end
