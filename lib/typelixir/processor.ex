@@ -50,9 +50,9 @@ defmodule Typelixir.Processor do
 
       case TypeComparator.has_type?(type_of_args_caller, :error) or 
             TypeComparator.has_type?(type_of_args_callee, :error) or 
+            TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) === :error or
             (TypeComparator.has_type?(type_of_args_caller, :float) and 
-            TypeComparator.float_to_int_type?(type_of_args_callee, type_of_args_caller)) or
-            TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) === :error do
+            TypeComparator.float_to_int_type?(type_of_args_callee, type_of_args_caller)) do
         true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on function call #{mod_name}.#{fn_name}")}}
         _ -> 
           case TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) do
@@ -120,6 +120,8 @@ defmodule Typelixir.Processor do
 
     case TypeComparator.has_type?(type_operand1, :error) or 
           TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, :float) === :error or
+          TypeComparator.less_or_equal?(type_operand2, :float) === :error or
           (not (TypeComparator.less_or_equal?(type_operand1, :float) and 
             TypeComparator.less_or_equal?(type_operand2, :float))) do
       true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on #{Atom.to_string(operator)} operator")}}
@@ -139,7 +141,8 @@ defmodule Typelixir.Processor do
   defp process({:-, [line: line], [operand]} = elem, env) do
     type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
 
-    case TypeComparator.has_type?(type_operand, :error) or  
+    case TypeComparator.has_type?(type_operand, :error) or
+          TypeComparator.less_or_equal?(type_operand, :float) === :error or
           (not (TypeComparator.less_or_equal?(type_operand, :float))) do
       true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on - operator")}}
       _ -> 
@@ -159,6 +162,8 @@ defmodule Typelixir.Processor do
 
     case TypeComparator.has_type?(type_operand1, :error) or 
           TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, :boolean) === :error or
+          TypeComparator.less_or_equal?(type_operand2, :boolean) === :error or
           (not (TypeComparator.less_or_equal?(type_operand1, :boolean) and 
             TypeComparator.less_or_equal?(type_operand2, :boolean))) do
       true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on #{Atom.to_string(operator)} operator")}}
@@ -178,7 +183,8 @@ defmodule Typelixir.Processor do
   defp process({:not, [line: line], [operand]} = elem, env) do
     type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
 
-    case TypeComparator.has_type?(type_operand, :error) or  
+    case TypeComparator.has_type?(type_operand, :error) or
+          TypeComparator.less_or_equal?(type_operand, :boolean) === :error or
           (not (TypeComparator.less_or_equal?(type_operand, :boolean))) do
       true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on not operator")}}
       _ -> 
@@ -273,6 +279,8 @@ defmodule Typelixir.Processor do
 
     case TypeComparator.has_type?(type_operand1, :error) or 
           TypeComparator.has_type?(type_operand2, :error) or 
+          TypeComparator.less_or_equal?(type_operand1, :string) === :error or
+          TypeComparator.less_or_equal?(type_operand2, :string) === :error or
           (not (TypeComparator.less_or_equal?(type_operand1, :string) and 
             TypeComparator.less_or_equal?(type_operand2, :string))) do
       true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Type error on <> operator")}}
