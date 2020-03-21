@@ -15,14 +15,7 @@ defmodule Typelixir.Processor do
     IO.inspect ast
     
     {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: modules_functions}, &process(&1, &2))
-
-    case result[:state] do
-      :error ->
-        data_merged = Enum.reduce(Map.to_list(result[:error_data]), fn acc, e -> if elem(acc, 0) < elem(e, 0), do: acc, else: e end)
-        %{result | data: data_merged}
-      :ok -> %{result | data: result[:warnings]}
-      _ -> result
-    end
+    prepare_result_data(result)
   end
 
   # NEEDS COMPILE
@@ -300,4 +293,17 @@ defmodule Typelixir.Processor do
   # ---------------------------------------------------------------------------------------------------
 
   defp process(elem, env), do: {elem, env}
+
+  # OTHERS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp prepare_result_data(result) do
+    case result[:state] do
+      :error ->
+        data_merged = Enum.reduce(Map.to_list(result[:error_data]), fn acc, e -> if elem(acc, 0) < elem(e, 0), do: acc, else: e end)
+        %{result | data: data_merged}
+      :ok -> %{result | data: result[:warnings]}
+      _ -> result
+    end
+  end
 end
