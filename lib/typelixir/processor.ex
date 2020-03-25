@@ -257,6 +257,54 @@ defmodule Typelixir.Processor do
     end
   end
 
+  # FUNCTION DEFINITION
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({defs, [line: line], [{function_name, meta, params}, [do: block]]}, env) when (defs in [:def, :defp]) do
+    elem = {defs, [line: line], [{function_name, meta, params}, [do: {:__block__, [], []}]]}
+
+    case env[:modules_functions][env[:module_name]][function_name] do
+      nil ->
+        {_ast, result} = Macro.prewalk(block, %{env | vars: %{}}, &process(&1, &2))
+        result = prepare_result_data(result)
+        case result[:state] do
+          :error -> 
+            return_error(elem, env, elem(result[:data], 0), elem(result[:data], 1))
+          :ok -> return_merge_warning(elem, env, nil, result[:warnings])
+          _ -> return_type(elem, %{env | state: result[:state], data: result[:data]}, nil)
+        end
+      _ -> 
+        return_type = env[:modules_functions][env[:module_name]][function_name] |> elem(0)
+        param_type_list = env[:modules_functions][env[:module_name]][function_name] |> elem(1)
+        case length(params) === length(param_type_list) do
+          false -> return_error(elem, env, line, "Wrong number of params on #{function_name} declaration")
+          _ ->
+            env_vars_ext = TypeBuilder.get_new_vars_env(params, param_type_list)
+            case env_vars_ext do
+              :error -> return_error(elem, env, line, "Params doesn't match function type on #{function_name} declaration")
+              _ ->
+                {_ast, result} = Macro.prewalk(block, %{env | vars: env_vars_ext}, &process(&1, &2))
+                result = prepare_result_data(result)
+                case result[:state] do
+                  :error -> 
+                    return_error(elem, env, elem(result[:data], 0), elem(result[:data], 1))
+                  :ok ->
+                    case TypeComparator.less_or_equal?(result[:type], return_type) do
+                      true -> return_merge_warning(elem, env, result[:type], result[:warnings])
+                      false -> 
+                        case TypeComparator.has_type?(return_type, nil) do
+                          true -> return_merge_warning(elem, env, result[:type], result[:warnings])
+                          false -> return_error(elem, env, line, "Body doesn't match function type on #{function_name} declaration")
+                        end 
+                      :error ->  return_error(elem, env, line, "Body doesn't match function type on #{function_name} declaration")
+                    end 
+                    _ -> return_type(elem, %{env | state: result[:state], data: result[:data]}, result[:type])
+                end
+            end
+        end
+    end
+  end
+
   # BASE CASE
   # ---------------------------------------------------------------------------------------------------
 
@@ -326,6 +374,10 @@ defmodule Typelixir.Processor do
 
   defp return_warning(elem, env, type, line, message) do
     {elem, %{env | type: type, warnings: Map.put(env[:warnings], line, message)}}
+  end
+
+  defp return_merge_warning(elem, env, type, new_warnings) do
+    {elem, %{env | type: type, warnings: Map.merge(env[:warnings], new_warnings)}}
   end
 
   defp return_type(elem, env, type) do
