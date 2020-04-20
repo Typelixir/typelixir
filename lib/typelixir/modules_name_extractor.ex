@@ -1,5 +1,7 @@
 defmodule Typelixir.ModuleNamesExtractor do
   @moduledoc false
+
+  # returns the map %{module_name => path_in_which_the_module_is}
   
   def extract_modules_names(all_paths) do
     modules_paths = 

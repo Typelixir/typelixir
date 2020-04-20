@@ -1,4 +1,7 @@
 defmodule Typelixir.TypeComparator do
+  # ---------------------------------------------------------------------------------------------------
+  # less_or_equal? -> returns true if type1 is less or equal than type2
+
   def less_or_equal?(type1, type2) when type1 === type2, do: true
   
   def less_or_equal?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
@@ -28,6 +31,7 @@ defmodule Typelixir.TypeComparator do
   def less_or_equal?(_, _), do: :error
 
   # ---------------------------------------------------------------------------------------------------
+  # greater -> returns the greater between type1 and type2
 
   def greater(type1, type2) when type1 === type2, do: type1
 
@@ -60,6 +64,7 @@ defmodule Typelixir.TypeComparator do
   def greater(_, _), do: :error
 
   # ---------------------------------------------------------------------------------------------------
+  # has_type? -> returns true if type1 contains type2
 
   def has_type?(list_type, type) when is_list(list_type) do
     Enum.map(list_type, fn t -> has_type?(t, type) end) |> Enum.member?(true)
@@ -77,9 +82,7 @@ defmodule Typelixir.TypeComparator do
   def has_type?(_, _), do: false
 
   # ---------------------------------------------------------------------------------------------------
-  
-  # float_to_int? returns true if op1 has type integer and op2 has type float because means that
-  # we are binding a float to an integer and that is an error
+  # float_to_int? returns true if pattern1 has type integer and the corresponding pattern2 has type float
 
   # Literals
   def float_to_int?(op1, op2, _env) when (is_integer(op1) and is_float(op2)), do: true
@@ -125,9 +128,7 @@ defmodule Typelixir.TypeComparator do
   def float_to_int?(_, _, _), do: false
 
   # ---------------------------------------------------------------------------------------------------
-  
-  # float_to_int_type? returns true if op1 has type integer and op2 has type float because means that
-  # we are binding a float to an integer and that is an error
+  # float_to_int_type? returns true if type1 has type integer and the corresponding type2 is float
   
   def float_to_int_type?(list_type1, list_type2) when (is_list(list_type1) and is_list(list_type2)) do
     if (length(list_type1) === length(list_type2)), 

@@ -32,6 +32,7 @@ defmodule Typelixir do
   defp compile_file(path, modules_functions) do
     env = %{
       state: :ok,
+      type: nil,
       error_data: %{},
       warnings: %{},
       data: %{},
