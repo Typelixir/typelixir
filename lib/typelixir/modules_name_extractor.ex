@@ -16,16 +16,28 @@ defmodule Typelixir.ModuleNamesExtractor do
   end
 
   defp extract_module_names_file(path) do
-    path
-    |> Path.absname()
-    |> File.read!()
-    |> Code.string_to_quoted()
-    |> Macro.prewalk([], &extract(&1, &2))
-    |> elem(1)
-    |> Enum.map(fn module -> {module, path} end)
+    {_ast, result} =
+      path
+      |> Path.absname()
+      |> File.read!()
+      |> Code.string_to_quoted()
+      |> Macro.prewalk(%{prefix: nil, names: []}, &extract(&1, &2))
+
+    Enum.map(result[:names], fn module -> {module, path} end)
   end
 
-  defp extract({:defmodule, _, [{:__aliases__, _, [module_name]}, _]} = elem, names), do: {elem, names ++ [module_name]}
+  defp extract({:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: block]]}, env) do
+    elem = {:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: {:__block__, [], []}]]}
+    name = 
+      module_name 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+    
+    new_mod_name = if env[:prefix], do: env[:prefix] <> "." <> name, else: name
+    {_ast, result} = Macro.prewalk(block, %{prefix: new_mod_name, names: []}, &extract(&1, &2))
+    
+    {elem, %{env | names: env[:names] ++ [new_mod_name] ++ result[:names]}}
+  end
 
   defp extract(elem, acc), do: {elem, acc}
 end
