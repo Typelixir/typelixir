@@ -40,7 +40,7 @@ defmodule Typelixir do
       error_data: %{},
       warnings: %{},
       data: %{},
-      module_name: :empty,
+      prefix: nil,
       vars: %{},
       modules_functions: modules_functions
     }

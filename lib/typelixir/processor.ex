@@ -7,15 +7,19 @@ defmodule Typelixir.Processor do
   # ---------------------------------------------------------------------------------------------------
 
   def process_file(path, env) do 
-    modules_functions = PreProcessor.process_file(path, env[:modules_functions])
-    ast = Code.string_to_quoted(File.read!(Path.absname(path)))
+    result = PreProcessor.process_file(path, env)
+    case result[:state] do
+      :error -> prepare_result_data(result)
+      _ ->
+        ast = Code.string_to_quoted(File.read!(Path.absname(path)))
     
-    # while developing to see the info in the console
-    IO.puts "#{path} ast:"
-    IO.inspect ast
-    
-    {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: modules_functions}, &process(&1, &2))
-    prepare_result_data(result)
+        # while developing to see the info in the console
+        IO.puts "#{path} ast:"
+        IO.inspect ast
+
+        {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: result[:modules_functions]}, &process(&1, &2))
+        prepare_result_data(result)
+    end
   end
 
   # NEEDS COMPILE
