@@ -1,7 +1,7 @@
 defmodule Typelixir.PreProcessor do
   @moduledoc false
 
-  alias Typelixir.{TypeBuilder}
+  alias Typelixir.{PatternBuilder}
 
   # extends the given map with the module name as key and the typed functions it defines as value
 
@@ -33,8 +33,8 @@ defmodule Typelixir.PreProcessor do
   # ---------------------------------------------------------------------------------------------------
 
   defp pre_process({:@, [line: line], [{:spec, _, [{:::, _, [{fn_name, _, type_of_args}, type_of_return]}]}]} = elem, env) do
-    type_of_args = Enum.map(type_of_args, fn type -> TypeBuilder.build(type, %{}) end)
-    fn_type = {TypeBuilder.build(type_of_return, %{}), type_of_args}
+    type_of_args = Enum.map(type_of_args, fn type -> PatternBuilder.type(type, %{}) end)
+    fn_type = {PatternBuilder.type(type_of_return, %{}), type_of_args}
     fn_key = {fn_name, length(type_of_args)}
 
     if (env[:modules_functions][env[:prefix]][fn_key]) do
