@@ -37,10 +37,13 @@ defmodule TypelixirTest do
       assert Typelixir.check(["#{@test_dir}/example.ex"]) === :ok
     end
 
-    test "returns :ok when the modules are well compiled and imported from others" do
+    test "returns :ok when the modules are well compiled by Typelixir" do
       File.write("test/tmp/example.ex", "
         defmodule Example do
-          import Example2
+          @spec test(integer) :: [integer]
+          def test(int) do
+            [int]
+          end
         end
       ")
       File.write("test/tmp/example2.ex", "
@@ -50,7 +53,7 @@ defmodule TypelixirTest do
       ")
       File.write("test/tmp/example3.ex", "
         defmodule Example3 do
-          import Example2
+          c = [1, 2] ++ Example2.test(3)
         end
       ")
       assert Typelixir.check(["#{@test_dir}/example.ex", "#{@test_dir}/example2.ex", "#{@test_dir}/example3.ex"]) === :ok
@@ -68,12 +71,11 @@ defmodule TypelixirTest do
 
       File.write("test/tmp/example2.ex", "
         defmodule Example2 do
-          import Example
           a = Example.test(true)
         end
       ")
       assert Typelixir.check(["#{@test_dir}/example.ex", "#{@test_dir}/example2.ex"]) 
-        === {:error, ["Type error on function call Example.test in test/tmp/example2.ex:4"]}
+        === {:error, ["Argument true does not have type :integer in test/tmp/example2.ex:3"]}
     end
   end
 end
