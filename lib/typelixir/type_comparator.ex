@@ -14,9 +14,9 @@ defmodule Typelixir.TypeComparator do
       case subtype?(Enum.zip(list_value_type1, list_value_type2)) do
         :error -> :error
         value_result ->
-          case supremum(key_type2, key_type1) do
+          case subtype?(key_type2, key_type1) do
             :error -> :error
-            _ -> value_result # cambiar si vamos a usar :none
+            key_result -> key_result and value_result
           end
       end
     else
@@ -37,6 +37,10 @@ defmodule Typelixir.TypeComparator do
 
   def subtype?(_, :any), do: true
 
+  def subtype?(:none, _), do: true
+
+  def subtype?(_, :none), do: false
+
   def subtype?(_, _), do: :error
 
   # ---------------------------------------------------------------------------------------------------
@@ -44,14 +48,17 @@ defmodule Typelixir.TypeComparator do
 
   def supremum(type1, type2) when type1 === type2, do: type1
 
+  def supremum(list_type1, list_type2) when is_list(list_type1) and is_list(list_type2), 
+    do: Enum.zip(list_type1, list_type2) |> Enum.map(fn {x, y} -> supremum(x, y) end)
+
   def supremum(list_type) when is_list(list_type), do: Enum.reduce(list_type, fn acc, e -> supremum(acc, e) end)
 
   def supremum({:map, {key_type1, list_value_type1}}, {:map, {key_type2, list_value_type2}}), do: 
     if (length(list_value_type1) >= length(list_value_type2)), do: 
-      {:map, {supremum(key_type1, key_type2), supremum(Enum.zip(list_value_type1, list_value_type2))}}, else: :error
+      {:map, {supremum(key_type1, key_type2), supremum(list_value_type1, list_value_type2)}}, else: :error
 
   def supremum({:tuple, list_type1}, {:tuple, list_type2}), do:
-    if (length(list_type1) === length(list_type2)), do: {:tuple, supremum(Enum.zip(list_type1, list_type2))}, else: :error
+    if (length(list_type1) === length(list_type2)), do: {:tuple, supremum(list_type1, list_type2)}, else: :error
 
   def supremum({:list, type1}, {:list, type2}), do: {:list, supremum(type1, type2)}
 
@@ -64,6 +71,10 @@ defmodule Typelixir.TypeComparator do
 
   def supremum(type, :any), do: type
   # --
+
+  def supremum(:none, type), do: type
+
+  def supremum(type, :none), do: type
 
   def supremum(:error, _), do: :error
 
