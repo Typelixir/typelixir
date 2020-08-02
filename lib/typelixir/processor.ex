@@ -7,35 +7,18 @@ defmodule Typelixir.Processor do
   # ---------------------------------------------------------------------------------------------------
 
   def process_file(path, env) do
-    result = PreProcessor.process_file(path, env)
-    case result[:state] do
-      :error -> Utils.prepare_result_data(result)
-      _ ->
-        ast = Code.string_to_quoted(File.read!(Path.absname(path)))
-    
-        # while developing to see the info in the console
-        IO.puts "#{path} ast:"
-        IO.inspect ast
+    ast = Code.string_to_quoted(File.read!(Path.absname(path)))
 
-        {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: result[:modules_functions]}, &process(&1, &2))
-        Utils.prepare_result_data(result)
-    end
+    # while developing to see the info in the console
+    IO.puts "#{path} ast:"
+    IO.inspect ast
+
+    {_ast, result} = Macro.prewalk(ast, env, &process(&1, &2))
+    Utils.prepare_result_data(result)
   end
 
   # BASE CASES
   # ---------------------------------------------------------------------------------------------------
-
-  # needs compile
-  defp process(elem, %{
-    state: :needs_compile,
-    type: _,
-    error_data: _,
-    warnings: _,
-    data: _,
-    prefix: _,
-    vars: _,
-    modules_functions: _
-  } = env), do: {elem, env}
 
   # error
   defp process(elem, %{
@@ -46,29 +29,62 @@ defmodule Typelixir.Processor do
     data: _,
     prefix: _,
     vars: _,
-    modules_functions: _
+    functions: _
   } = env), do: {elem, env}
 
   # block
   defp process({:__block__, _, _} = elem, env), do: {elem, env}
 
-  # IMPORT, ALIAS, REQUIRE
+  # IMPORT
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({operator, _, [{:__aliases__, _, module_name_ext}]} = elem, env) when operator in [:import, :require, :alias] do
+  defp process({:import, [line: line], [{:__aliases__, _, module_name_ext}]}, env) do
+    elem = {:import, [line: line], []}
+
     module_name = 
       module_name_ext 
       |> Enum.map(fn name -> Atom.to_string(name) end) 
       |> Enum.join(".")
 
-    case env[:modules_functions][module_name] do
-      nil -> {elem, %{env | state: :needs_compile, data: module_name}}
-      _ -> 
-        cond do
-          operator === :alias -> 
-            {elem, %{env | modules_functions: Map.put(env[:modules_functions], Atom.to_string(Enum.at(module_name_ext, -1)), env[:modules_functions][module_name])}}
-          true -> {elem, env}
-        end
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], env[:prefix], Map.merge(env[:functions][env[:prefix]], env[:functions][module_name]))}}
+    end
+  end
+
+  # ALIAS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({:alias, [line: line], [{:__aliases__, _, module_name_ext}]}, env) do
+    elem = {:alias, [line: line], []}
+
+    module_name = 
+      module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], Atom.to_string(Enum.at(module_name_ext, -1)), env[:functions][module_name])}}
+    end
+  end
+
+  defp process({:alias, [line: line], [{:__aliases__, _, module_name_ext}, [as: {:__aliases__, _, as_module_name_ext}]]}, env) do
+    elem = {:alias, [line: line], []}
+
+    module_name = 
+      module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+    
+    as_module_name = 
+      as_module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], as_module_name, env[:functions][module_name])}}
     end
   end
 
@@ -77,13 +93,15 @@ defmodule Typelixir.Processor do
 
   defp process({:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: block]]}, env) do
     elem = {:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: {:__block__, [], []}]]}
+    
     name = 
       module_name 
       |> Enum.map(fn name -> Atom.to_string(name) end) 
       |> Enum.join(".")
-    
     new_mod_name = if env[:prefix], do: env[:prefix] <> "." <> name, else: name
+    
     {_ast, result} = Macro.prewalk(block, %{env | vars: %{}, prefix: new_mod_name}, &process(&1, &2)) 
+    result = Utils.prepare_result_data(result)
 
     {elem, result}
   end
@@ -102,14 +120,15 @@ defmodule Typelixir.Processor do
     params_length = length(params)
     fn_key = {function_name, params_length}
 
-    case env[:modules_functions][env[:prefix]][fn_key] do
+    case env[:functions][env[:prefix]][fn_key] do
       nil ->
         {_ast, result} = Macro.prewalk(block, %{env | vars: %{}}, &process(&1, &2))
         result = Utils.prepare_result_data(result)
+
         {elem, result}
       _ -> 
-        return_type = env[:modules_functions][env[:prefix]][fn_key] |> elem(0)
-        param_type_list = env[:modules_functions][env[:prefix]][fn_key] |> elem(1)
+        return_type = env[:functions][env[:prefix]][fn_key] |> elem(0)
+        param_type_list = env[:functions][env[:prefix]][fn_key] |> elem(1)
         params_vars = PatternBuilder.vars(params, param_type_list)
 
         case params_vars do
@@ -163,12 +182,14 @@ defmodule Typelixir.Processor do
   # NUMBER OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:*, :+, :/, :-]) do
+  defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:*, :+, :-]) do
     elem = {operator, [line: line], []}
-    cond do
-      operator === :/ -> binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, true, false, false)
-      true -> binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, false, false, false)
-    end
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, false, false, false)
+  end
+
+  defp process({:/, [line: line], [operand1, operand2]}, env) do
+    elem = {:/, [line: line], []}
+    binary_operator_process(elem, env, line, :/, operand1, operand2, :integer, :float, true, false, false)
   end
 
   # neg
@@ -252,9 +273,6 @@ defmodule Typelixir.Processor do
       _ ->
         {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
         result_do_block = Utils.prepare_result_data(result_do_block)
-
-        {_ast, result_else_block} = Macro.prewalk(else_block, result_condition, &process(&1, &2))
-        result_else_block = Utils.prepare_result_data(result_else_block)
         
         case TypeComparator.subtype?(result_condition[:type], :boolean) do
           :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
@@ -262,6 +280,9 @@ defmodule Typelixir.Processor do
             case result_do_block[:state] do
               :error -> {elem, result_do_block}
               _ -> 
+                {_ast, result_else_block} = Macro.prewalk(else_block, result_condition, &process(&1, &2))
+                result_else_block = Utils.prepare_result_data(result_else_block)
+                
                 case result_else_block[:state] do
                   :error -> {elem, result_else_block}
                   _ ->
@@ -340,7 +361,7 @@ defmodule Typelixir.Processor do
                     end
                 end
             end
-        end)
+          end)
     end
   end
 
@@ -355,6 +376,7 @@ defmodule Typelixir.Processor do
       Enum.map(list, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
       |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
           result = Utils.prepare_result_data(result)
+          
           case result[:state] do
             :error -> {:halt, {[], result}}
             _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
@@ -378,6 +400,7 @@ defmodule Typelixir.Processor do
       Enum.map(keys, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
       |> Enum.reduce_while({:any, env}, fn result, {type_acc, env_acc} ->
           result = Utils.prepare_result_data(result)
+          
           case result[:state] do
             :error -> {:halt, {:any, result}}
             _ -> 
@@ -395,6 +418,7 @@ defmodule Typelixir.Processor do
           Enum.map(values, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
           |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
               result = Utils.prepare_result_data(result)
+              
               case result[:state] do
                 :error -> {:halt, {[], result}}
                 _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
@@ -421,7 +445,7 @@ defmodule Typelixir.Processor do
     elem = {value, [line: line], []}
     case env[:vars][value] do
       nil ->
-        if (env[:prefix] !== nil and is_list(params) and env[:modules_functions][env[:prefix]][{value, length(params)}] !== nil) do
+        if (env[:prefix] !== nil and is_list(params) and env[:functions][env[:prefix]][{value, length(params)}] !== nil) do
           function_call_process(elem, line, [String.to_atom(env[:prefix])], value, params, env)
         else
           {elem, %{env | type: :any}} 
@@ -443,6 +467,7 @@ defmodule Typelixir.Processor do
       Enum.map(elem, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
       |> Enum.reduce_while({:any, env}, fn result, {type_acc, env_acc} ->
           result = Utils.prepare_result_data(result)
+          
           case result[:state] do
             :error -> {:halt, {:any, result}}
             _ -> 
@@ -462,6 +487,7 @@ defmodule Typelixir.Processor do
       Enum.map([elem1, elem2], fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
       |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
           result = Utils.prepare_result_data(result)
+          
           case result[:state] do
             :error -> {:halt, {[], result}}
             _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
@@ -482,7 +508,7 @@ defmodule Typelixir.Processor do
       mod_names 
         |> Enum.map(fn name -> Atom.to_string(name) end) 
         |> Enum.join(".")
-    spec_type = env[:modules_functions][mod_name][{fn_name, length(args)}]
+    spec_type = env[:functions][mod_name][{fn_name, length(args)}]
 
     if (spec_type) do
       {result_type, type_args} = spec_type
@@ -490,12 +516,13 @@ defmodule Typelixir.Processor do
       args_check = Enum.reduce_while(Enum.zip(args, type_args), env, 
         fn {arg, type}, acc_env ->
           {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
+          result = Utils.prepare_result_data(result)
           
           case TypeComparator.subtype?(result[:type], type) do
-            true -> {:cont, Map.merge(acc_env, Utils.prepare_result_data(result))}
+            true -> {:cont, Map.merge(acc_env, result)}
             _ -> 
               # ver casos para imprimir bien variables, literales, etc
-              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Argument #{inspect arg} does not have type #{inspect type}")}}
+              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Argument #{inspect arg} does not have type #{Atom.to_string(type)}")}}
           end
         end)
       
@@ -539,13 +566,13 @@ defmodule Typelixir.Processor do
   defp binary_operator_process(elem, env, line, operator, operand1, operand2, min_type, max_type, is_division, is_comparison, is_list) do
     {_ast, result_op1} = Macro.prewalk(operand1, env, &process(&1, &2))
     result_op1 = Utils.prepare_result_data(result_op1)
-
-    {_ast, result_op2} = Macro.prewalk(operand2, env, &process(&1, &2))
-    result_op2 = Utils.prepare_result_data(result_op2)
     
     case result_op1[:state] do
       :error -> {elem, result_op1}
       _ ->
+        {_ast, result_op2} = Macro.prewalk(operand2, env, &process(&1, &2))
+        result_op2 = Utils.prepare_result_data(result_op2)
+
         case result_op2[:state] do
           :error -> {elem, result_op2}
           _ ->
@@ -596,7 +623,7 @@ defmodule Typelixir.Processor do
                   true -> Utils.return_merge_vars(elem, %{result_map | type: :any}, result_key[:vars])
                   _ -> Utils.return_error(elem, env, {line, "Expected #{key_type} as key instead of #{result_key[:type]}"})
                 end
-              _ -> Utils.return_error(elem, env, {line, "#{inspect map} is not a map"})
+              _ -> Utils.return_error(elem, env, {line, "#{inspect map} is not a map"}) # ver casos para imprimir bien variables, literales, etc
             end
         end
     end

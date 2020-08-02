@@ -6,14 +6,24 @@ defmodule Typelixir.ProcessorTest do
     @test_dir "test/tmp"
 
     @env %{
-      state: :ok,
-      type: nil,
-      error_data: %{},
-      warnings: %{},
-      data: [],
-      module_name: :empty,
-      vars: %{},
-      modules_functions: %{}
+      :functions => %{
+        "ModuleA.ModuleB" => %{
+          {:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
+          {:test2, 0} => {:any, []},
+          {:test3, 1} => {:any, [:integer]},
+          {:test3, 2} => {:string, [:integer, :string]}
+        },
+        "ModuleC" => %{
+          {:test, 2} => {:string, [:integer, :string]}
+        },
+        "Example" => %{}
+      },
+      :prefix => nil,
+      :type => nil,
+      :state => :ok,
+      :error_data => %{},
+      :data => %{},
+      :vars => %{}
     }
 
     setup do
@@ -24,19 +34,84 @@ defmodule Typelixir.ProcessorTest do
       end
     end
 
+    # NOTE -> we don't care about the type the module returns
+
     test "returns ok when there is no module or code defined on the file" do
       File.write("test/tmp/example.ex", "")
       assert Processor.process_file("#{@test_dir}/example.ex", @env) 
-        === %{data: %{}, type: nil, error_data: %{}, warnings: %{}, module_name: :empty, modules_functions: %{}, state: :ok, vars: %{}}
+        === %{
+          :functions => %{
+            "ModuleA.ModuleB" => %{
+              {:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
+              {:test2, 0} => {:any, []},
+              {:test3, 1} => {:any, [:integer]},
+              {:test3, 2} => {:string, [:integer, :string]}
+            },
+            "ModuleC" => %{
+              {:test, 2} => {:string, [:integer, :string]}
+            },
+            "Example" => %{}
+          },
+          :prefix => nil,
+          :type => :atom,
+          :state => :ok,
+          :error_data => %{},
+          :data => %{},
+          :vars => %{}
+        }
 
       File.write("test/tmp/example.ex", "
         defmodule Example do
         end
       ")
       assert Processor.process_file("#{@test_dir}/example.ex", @env) 
-        === %{data: %{}, type: nil, error_data: %{}, warnings: %{}, module_name: :Example, modules_functions: %{Example: %{}}, state: :ok, vars: %{}}
+        === %{
+          :functions => %{
+            "ModuleA.ModuleB" => %{
+              {:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
+              {:test2, 0} => {:any, []},
+              {:test3, 1} => {:any, [:integer]},
+              {:test3, 2} => {:string, [:integer, :string]}
+            },
+            "ModuleC" => %{
+              {:test, 2} => {:string, [:integer, :string]}
+            },
+            "Example" => %{}
+          },
+          :prefix => "Example",
+          :type => {:list, {:tuple, [:atom, :any]}},
+          :state => :ok,
+          :error_data => %{},
+          :data => %{},
+          :vars => %{}
+        }
     end
 
-    # TO DO ALL THE TEST CASES WE WANT
+    # test "returns ok when there is no module or code defined on the file" do
+    #   File.write("test/tmp/example.ex", "
+    #     defmodule Example do
+    #     end
+    #   ")
+    #   assert Processor.process_file("#{@test_dir}/example.ex", @env) 
+    #     === %{
+    #       :functions => %{
+    #         "ModuleA.ModuleB" => %{
+    #           {:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]},
+    #           {:test2, 0} => {:any, []},
+    #           {:test3, 1} => {:any, [:integer]},
+    #           {:test3, 2} => {:string, [:integer, :string]}
+    #         },
+    #         "ModuleC" => %{
+    #           {:test, 2} => {:string, [:integer, :string]}
+    #         }
+    #       },
+    #       :prefix => "Example",
+    #       :type => {:list, {:tuple, [:atom, :any]}},
+    #       :state => :ok,
+    #       :error_data => %{},
+    #       :data => %{},
+    #       :vars => %{}
+    #     }
+    # end
   end
 end

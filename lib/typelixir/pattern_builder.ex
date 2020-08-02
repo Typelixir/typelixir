@@ -15,7 +15,7 @@ defmodule Typelixir.PatternBuilder do
   def type({:_, _, _}, _env), do: :any
 
   # @spec
-  def type({type, _, _}, _env) when (type in [:string, :boolean, :integer, :float, :atom, :any]), do: type
+  def type({type, _, _}, _env) when (type in [:string, :boolean, :integer, :float, :atom, :any, :none]), do: type
 
   # tuple more 2 elems
   def type({:{}, _, list}, env), do: {:tuple, Enum.map(list, fn t -> type(t, env) end)}
@@ -107,18 +107,9 @@ defmodule Typelixir.PatternBuilder do
 
   defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
 
-  defp get_vars({:{}, _, ops}, {:tuple, type_list}) do 
-    if length(ops) === length(type_list), 
-      do: Enum.zip(ops, type_list) |> Enum.map(fn {var, type} -> get_vars(var, type) end),
-      else: {:error, "The number of parameters in tuple does not match the number of types"}
-  end
+  defp get_vars({:{}, _, ops}, {:tuple, type_list}), do: get_vars_tuple(ops, type_list)
 
-  defp get_vars(ops, {:tuple, type_list}) when is_tuple(ops) do
-    ops = Tuple.to_list(ops)
-    if length(ops) === length(type_list), 
-      do: Enum.zip(ops, type_list) |> Enum.map(fn {var, type} -> get_vars(var, type) end),
-      else: {:error, "The number of parameters in tuple does not match the number of types"}
-  end
+  defp get_vars(ops, {:tuple, type_list}) when is_tuple(ops), do: get_vars_tuple(Tuple.to_list(ops), type_list)
 
   defp get_vars({:%{}, _, op}, {:map, {_, value_type}}) do
     (Enum.map(op, fn {_, value} -> value end) |> Enum.map(fn x -> get_vars(x, value_type) end))
@@ -138,4 +129,10 @@ defmodule Typelixir.PatternBuilder do
   end
 
   defp get_vars(_, _), do: {:error, "Parameters does not match type specification"}
+
+  defp get_vars_tuple(ops, type_list) do
+    if length(ops) === length(type_list), 
+      do: Enum.zip(ops, type_list) |> Enum.map(fn {var, type} -> get_vars(var, type) end),
+      else: {:error, "The number of parameters in tuple does not match the number of types"}
+  end
 end
