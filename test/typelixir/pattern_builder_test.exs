@@ -128,7 +128,7 @@ defmodule Typelixir.PatternBuilderTest do
       assert vars([1, 1.2, true, :un_atom, "un string"], [:integer, :float, :boolean, :atom, :string]) === %{}
       assert vars([1], [:float]) === %{}
       assert vars([1], [:any]) === %{}
-      assert vars([1], [:string]) === {:error, "1 does not have string type"}
+      assert vars([1], [:string]) === {:error, "Parameters does not match type specification"}
     end
 
     test "return variables from simple variable patterns" do

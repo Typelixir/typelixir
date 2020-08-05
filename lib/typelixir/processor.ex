@@ -509,6 +509,8 @@ defmodule Typelixir.Processor do
         |> Enum.join(".")
     spec_type = env[:functions][mod_name][{fn_name, length(args)}]
 
+    IO.inspect spec_type
+
     if (spec_type) do
       {result_type, type_args} = spec_type
 
@@ -534,6 +536,8 @@ defmodule Typelixir.Processor do
           {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
           Map.merge(acc_env, Utils.prepare_result_data(result))
         end)
+
+      IO.inspect args_check
 
       case args_check[:state] do
         :error -> {elem, args_check}

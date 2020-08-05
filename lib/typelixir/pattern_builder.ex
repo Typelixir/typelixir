@@ -105,13 +105,13 @@ defmodule Typelixir.PatternBuilder do
   defp get_vars({:|, _, [operand1, operand2]}, {:list, type}),
     do: [get_vars(operand1, type), get_vars(operand2, {:list, type})]
 
+  defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
+
   defp get_vars(_, {:list, _}), do: {:error, "Parameters does not match type specification"}
 
   defp get_vars([], _), do: {:error, "Parameters does not match type specification"}
 
   defp get_vars({:|, _, _}, _), do: {:error, "Parameters does not match type specification"}
-
-  defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
 
   defp get_vars({:{}, _, ops}, {:tuple, type_list}), do: get_vars_tuple(ops, type_list)
 
@@ -136,7 +136,7 @@ defmodule Typelixir.PatternBuilder do
       (is_float(value) and type === :float) or
       (is_atom(value) and type === :atom) 
         -> []
-      true -> {:error, "#{Utils.print_param(value)} does not have #{type} type"}
+      true -> {:error, "Parameters does not match type specification"}
     end
   end
 

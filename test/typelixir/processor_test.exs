@@ -230,12 +230,12 @@ defmodule Typelixir.ProcessorTest do
           :type => {:list, :any},
           :state => :error,
           :error_data => %{
-            4 => "[x] does not have integer type", 
+            4 => "Parameters does not match type specification", 
             5 => "Variable x is already defined with type integer", 
             8 => "Parameters does not match type specification", 
             9 => "The number of parameters in tuple does not match the number of types"
           },
-          :data => {4, "[x] does not have integer type"},
+          :data => {4, "Parameters does not match type specification"},
           :vars => %{}
         }
     end
