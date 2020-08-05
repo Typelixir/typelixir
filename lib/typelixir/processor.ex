@@ -35,6 +35,24 @@ defmodule Typelixir.Processor do
   # block
   defp process({:__block__, _, _} = elem, env), do: {elem, env}
 
+  # DEFMODULE
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: block]]}, env) do
+    elem = {:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: {:__block__, [], []}]]}
+    
+    name = 
+      module_name 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+    new_mod_name = if env[:prefix], do: env[:prefix] <> "." <> name, else: name
+    
+    {_ast, result} = Macro.prewalk(block, %{env | vars: %{}, prefix: new_mod_name}, &process(&1, &2)) 
+    result = Utils.prepare_result_data(result)
+
+    {elem, result}
+  end
+
   # IMPORT
   # ---------------------------------------------------------------------------------------------------
 
@@ -86,24 +104,6 @@ defmodule Typelixir.Processor do
       nil -> {elem, env}
       _ -> {elem, %{env | functions: Map.put(env[:functions], as_module_name, env[:functions][module_name])}}
     end
-  end
-
-  # DEFMODULE
-  # ---------------------------------------------------------------------------------------------------
-
-  defp process({:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: block]]}, env) do
-    elem = {:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: {:__block__, [], []}]]}
-    
-    name = 
-      module_name 
-      |> Enum.map(fn name -> Atom.to_string(name) end) 
-      |> Enum.join(".")
-    new_mod_name = if env[:prefix], do: env[:prefix] <> "." <> name, else: name
-    
-    {_ast, result} = Macro.prewalk(block, %{env | vars: %{}, prefix: new_mod_name}, &process(&1, &2)) 
-    result = Utils.prepare_result_data(result)
-
-    {elem, result}
   end
 
   # FUNCTIONS DEF
@@ -184,12 +184,12 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:*, :+, :-]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, false, false, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, false)
   end
 
   defp process({:/, [line: line], [operand1, operand2]}, env) do
     elem = {:/, [line: line], []}
-    binary_operator_process(elem, env, line, :/, operand1, operand2, :integer, :float, true, false, false)
+    binary_operator_process(elem, env, line, :/, operand1, operand2, :integer, :float, false)
   end
 
   # neg
@@ -203,7 +203,7 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:and, :or]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :boolean, false, false, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :boolean, false)
   end
 
   # not
@@ -217,7 +217,7 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:==, :!=, :>, :<, :<=, :>=, :===, :!==]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :any, false, true, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :any, true)
   end
 
   # LIST OPERATORS
@@ -225,7 +225,7 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when operator in [:++, :--] do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, {:list, :any}, {:list, :any}, false, false, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, {:list, :any}, {:list, :any}, false)
   end
 
   # STRING OPERATORS
@@ -233,7 +233,7 @@ defmodule Typelixir.Processor do
 
   defp process({:<>, [line: line], [operand1, operand2]}, env) do
     elem = {:<>, [line: line], []}
-    binary_operator_process(elem, env, line, :<>, operand1, operand2, :string, :string, false, false, false)
+    binary_operator_process(elem, env, line, :<>, operand1, operand2, :string, :string, false)
   end
 
   # IF/UNLESS
@@ -458,7 +458,7 @@ defmodule Typelixir.Processor do
 
   defp process([{:|, [line: line], [operand1, operand2]}], env) do
     elem = {:|, [line: line], []}
-    binary_operator_process(elem, env, line, :|, operand1, operand2, {:list, :any}, {:list, :any}, false, false, true)
+    binary_operator_process(elem, env, line, :|, operand1, operand2, {:list, :any}, {:list, :any}, false)
   end
 
   defp process(elem, env) when is_list(elem) do
@@ -509,8 +509,6 @@ defmodule Typelixir.Processor do
         |> Enum.join(".")
     spec_type = env[:functions][mod_name][{fn_name, length(args)}]
 
-    IO.inspect spec_type
-
     if (spec_type) do
       {result_type, type_args} = spec_type
 
@@ -522,7 +520,7 @@ defmodule Typelixir.Processor do
           case TypeComparator.subtype?(result[:type], type) do
             true -> {:cont, Map.merge(acc_env, result)}
             _ ->
-              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Argument #{Utils.print_param(arg)} does not have type #{Atom.to_string(type)}")}}
+              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Arguments does not match type specification on #{fn_name}/#{length(args)}")}}
           end
         end)
       
@@ -536,8 +534,6 @@ defmodule Typelixir.Processor do
           {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
           Map.merge(acc_env, Utils.prepare_result_data(result))
         end)
-
-      IO.inspect args_check
 
       case args_check[:state] do
         :error -> {elem, args_check}
@@ -565,7 +561,7 @@ defmodule Typelixir.Processor do
     end
   end
 
-  defp binary_operator_process(elem, env, line, operator, operand1, operand2, min_type, max_type, is_division, is_comparison, is_list) do
+  defp binary_operator_process(elem, env, line, operator, operand1, operand2, min_type, max_type, is_comparison) do
     {_ast, result_op1} = Macro.prewalk(operand1, env, &process(&1, &2))
     result_op1 = Utils.prepare_result_data(result_op1)
     
@@ -583,8 +579,8 @@ defmodule Typelixir.Processor do
               true ->
                 type = 
                   cond do
-                    is_list and is_tuple(result_op2[:type]) -> TypeComparator.supremum({:list, result_op1[:type]}, result_op2[:type])
-                    is_list -> {:list, TypeComparator.supremum(result_op1[:type], result_op2[:type])}
+                    operator === :| and is_tuple(result_op2[:type]) -> TypeComparator.supremum({:list, result_op1[:type]}, result_op2[:type])
+                    operator === :| -> {:list, TypeComparator.supremum(result_op1[:type], result_op2[:type])}
                     true -> TypeComparator.supremum(result_op1[:type], result_op2[:type])
                   end
                 
@@ -595,7 +591,7 @@ defmodule Typelixir.Processor do
                     case TypeComparator.subtype?(type, max_type) do
                       true -> 
                         cond do
-                          is_division -> Utils.return_merge_vars(elem, %{result_op1 | type: :float}, result_op2[:vars])
+                          operator === :/ -> Utils.return_merge_vars(elem, %{result_op1 | type: :float}, result_op2[:vars])
                           true -> Utils.return_merge_vars(elem, %{result_op1 | type: type}, result_op2[:vars])
                         end
                       _ -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
@@ -625,7 +621,7 @@ defmodule Typelixir.Processor do
                   true -> Utils.return_merge_vars(elem, %{result_map | type: :any}, result_key[:vars])
                   _ -> Utils.return_error(elem, env, {line, "Expected #{key_type} as key instead of #{result_key[:type]}"})
                 end
-              _ -> Utils.return_error(elem, env, {line, "#{inspect map} is not a map"}) # ver casos para imprimir bien variables, literales, etc
+              _ -> Utils.return_error(elem, env, {line, "Not accessing to a map"})
             end
         end
     end

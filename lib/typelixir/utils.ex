@@ -28,23 +28,4 @@ defmodule Typelixir.Utils do
   def return_merge_vars(elem, env, new_vars) do
     {elem, %{env | vars: Map.merge(env[:vars], new_vars)}}
   end
-
-  # ---------------------------------------------------------------------------------------------------
-  # print_param -> humanize ast to print error on params
-
-  def print_param([]), do: "[]"
-
-  def print_param([value]), do: "[#{print_param(value)}]"
-
-  def print_param({:|, _, [operand1, operand2]}), do: "#{print_param(operand1)} | #{print_param(operand2)}"
-
-  def print_param({:%{}, _, ops}), do: "%{#{Enum.join(Enum.map(ops, fn {key, value} -> "#{print_param(key)} => #{print_param(value)}" end), ", ")}}"
-
-  def print_param({:{}, _, ops}), do: "{#{Enum.join(Enum.map(ops, fn op -> print_param(op) end), ", ")}}"
-
-  def print_param({value, _, _}), do: Atom.to_string(value)
-
-  def print_param(ops) when is_tuple(ops), do: "{#{Enum.join(Enum.map(Tuple.to_list(ops), fn op -> print_param(op) end), ", ")}}"
-
-  def print_param(value), do: value
 end

@@ -75,7 +75,7 @@ defmodule TypelixirTest do
         end
       ")
       assert Typelixir.check(["#{@test_dir}/example.ex", "#{@test_dir}/example2.ex"]) 
-        === {:error, ["Argument true does not have type integer in test/tmp/example2.ex:3"]}
+        === {:error, ["Arguments does not match type specification on test/1 in test/tmp/example2.ex:3"]}
     end
   end
 end
