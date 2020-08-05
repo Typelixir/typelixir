@@ -1,6 +1,6 @@
 defmodule Typelixir.PatternBuilder do
 
-  alias Typelixir.TypeComparator
+  alias Typelixir.{TypeComparator, Utils}
 
   # ---------------------------------------------------------------------------------------------------
   # type -> returns the type of types defined on @spec
@@ -124,7 +124,7 @@ defmodule Typelixir.PatternBuilder do
       (is_float(value) and type === :float) or
       (is_atom(value) and type === :atom) 
         -> []
-      true -> {:error, "#{value} does not have #{type} type"}
+      true -> {:error, "#{Utils.print_param(value)} does not have #{type} type"}
     end
   end
 

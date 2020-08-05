@@ -1,16 +1,16 @@
 # Typelixir
 
-The library proposes a typing system that makes possible to perform static type-checking on a significant fragment of Elixir. 
+The library proposes a type system that makes possible to perform static type-checking on a significant fragment of Elixir. 
 
-An important feature of the typing system is that it does not require any syntactic change to the language. Type information is provided by means of function signatures `@spec`.
+An important feature of the type system is that it does not require any syntactic change to the language. Type information is provided by means of function signatures `@spec`.
 
 The approach is inspired by the so-called [gradual typing](https://en.wikipedia.org/wiki/Gradual_typing).
 
-The proposed typing system is based on subtyping and is backwards compatible, as it allows the presence of non-typed code fragments. Represented as the `any` type.
+The proposed type system is based on subtyping and is backwards compatible, as it allows the presence of non-typed code fragments. Represented as the `any` type.
 
 The code parts that are not statically type checked because of lack of typing information, will be type checked then at runtime.
 
-[Here](./lib/example/EXAMPLE.md) are some examples of usages.
+[Here](./lib/TYPE_SYSTEM.md) is the proposed type system and how to write the code to be statically type checked.
 
 ### Note
 

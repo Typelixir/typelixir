@@ -520,9 +520,8 @@ defmodule Typelixir.Processor do
           
           case TypeComparator.subtype?(result[:type], type) do
             true -> {:cont, Map.merge(acc_env, result)}
-            _ -> 
-              # ver casos para imprimir bien variables, literales, etc
-              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Argument #{inspect arg} does not have type #{Atom.to_string(type)}")}}
+            _ ->
+              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Argument #{Utils.print_param(arg)} does not have type #{Atom.to_string(type)}")}}
           end
         end)
       
