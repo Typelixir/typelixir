@@ -137,6 +137,12 @@ defmodule Typelixir.PatternBuilderTest do
       assert vars([{:a, nil, nil}], [:any]) === %{} 
     end
 
+    test "returns variables of composed types" do
+      assert vars([{:a, nil, nil}], [{:tuple, [:integer]}]) === %{a: {:tuple, [:integer]}}
+      assert vars([{:a, nil, nil}], [{:map, {:integer,[:integer]}}]) === %{a: {:map, {:integer,[:integer]}}}
+      assert vars([{:a, nil, nil}], [{:list, :integer}]) === %{a: {:list, :integer}}
+    end
+
     test "return variables from wild patterns" do
       assert vars([{:_, nil, nil}], [:integer]) === %{}
     end

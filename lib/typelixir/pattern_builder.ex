@@ -1,6 +1,6 @@
 defmodule Typelixir.PatternBuilder do
 
-  alias Typelixir.{TypeComparator, Utils}
+  alias Typelixir.{TypeComparator}
 
   # ---------------------------------------------------------------------------------------------------
   # type -> returns the type of types defined on @spec
@@ -93,19 +93,19 @@ defmodule Typelixir.PatternBuilder do
 
   defp get_vars(_, :any), do: []
 
+  defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}, :=, :_, :|]), do: {op, type}
+
   defp get_vars({:_, _, _}, _type), do: []
 
   defp get_vars({:=, _, [operand1, operand2]}, type), 
     do: [get_vars(operand1, type), get_vars(operand2, type)]
 
-  defp get_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_vars(x, type) end)
-
   defp get_vars([], {:list, _type}), do: []
+
+  defp get_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_vars(x, type) end)
 
   defp get_vars({:|, _, [operand1, operand2]}, {:list, type}),
     do: [get_vars(operand1, type), get_vars(operand2, {:list, type})]
-
-  defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
 
   defp get_vars(_, {:list, _}), do: {:error, "Parameters does not match type specification"}
 
@@ -113,17 +113,17 @@ defmodule Typelixir.PatternBuilder do
 
   defp get_vars({:|, _, _}, _), do: {:error, "Parameters does not match type specification"}
 
-  defp get_vars({:{}, _, ops}, {:tuple, type_list}), do: get_vars_tuple(ops, type_list)
-
-  defp get_vars({:{}, _, _}, _), do: {:error, "Parameters does not match type specification"}
-
   defp get_vars({:%{}, _, op}, {:map, {_, value_types}}), do: Enum.zip(op, value_types) |> Enum.map(fn {{_, value}, value_type} -> get_vars(value, value_type) end)
 
   defp get_vars({:%{}, _, _}, _), do: {:error, "Parameters does not match type specification"}
 
   defp get_vars(_, {:map, {_, _}}), do: {:error, "Parameters does not match type specification"}
 
+  defp get_vars({:{}, _, ops}, {:tuple, type_list}), do: get_vars_tuple(ops, type_list)
+
   defp get_vars(ops, {:tuple, type_list}) when is_tuple(ops), do: get_vars_tuple(Tuple.to_list(ops), type_list)
+
+  defp get_vars({:{}, _, _}, _), do: {:error, "Parameters does not match type specification"}
 
   defp get_vars(_, {:tuple, _}), do: {:error, "Parameters does not match type specification"}
   
