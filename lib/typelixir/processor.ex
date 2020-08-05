@@ -271,12 +271,12 @@ defmodule Typelixir.Processor do
     case result_condition[:state] do
       :error -> {elem, result_condition}
       _ ->
-        {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
-        result_do_block = Utils.prepare_result_data(result_do_block)
-        
         case TypeComparator.subtype?(result_condition[:type], :boolean) do
           :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
           _ -> 
+            {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
+            result_do_block = Utils.prepare_result_data(result_do_block)
+            
             case result_do_block[:state] do
               :error -> {elem, result_do_block}
               _ -> 
@@ -392,7 +392,6 @@ defmodule Typelixir.Processor do
   defp process({:%{}, [line: line], list}, env) do
     elem = {:%{}, [line: line], []}
     
-    list = Enum.sort(list)
     keys = Enum.map(list, fn {k, _} -> k end)
     values = Enum.map(list, fn {_, v} -> v end)
 

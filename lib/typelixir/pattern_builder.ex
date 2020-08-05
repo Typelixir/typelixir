@@ -24,7 +24,7 @@ defmodule Typelixir.PatternBuilder do
   def type({:%{}, _, []}, _env), do: {:map, {:any, :any}}
 
   def type({:%{}, _, list}, env) do
-    keys_values = Enum.map(Enum.sort(list), fn {key, elem} -> {type(key, env), type(elem, env)} end)
+    keys_values = Enum.map(list, fn {key, elem} -> {type(key, env), type(elem, env)} end)
     {:map, {
       elem(Enum.reduce(keys_values, fn {k_acc, _}, {k_e, _} -> {TypeComparator.supremum(k_acc, k_e), :_} end), 0),
       Enum.map(keys_values, fn {_, v} -> v end)
@@ -33,6 +33,9 @@ defmodule Typelixir.PatternBuilder do
 
   def type({:|, _, [operand1, operand2]}, env), 
     do: {:list, TypeComparator.supremum(type(operand1, env), type(operand2, env))}
+  
+  # binding
+  def type({:=, _, [operand1, operand2]}, env), do: TypeComparator.supremum(type(operand1, env), type(operand2, env))
 
   # variables
   def type({value, _, _}, env) do
@@ -51,9 +54,6 @@ defmodule Typelixir.PatternBuilder do
   # tuple 2 elems
   def type(value, env) when is_tuple(value), 
     do: {:tuple, Enum.map(Tuple.to_list(value), fn t -> type(t, env) end)}
-
-  # binding
-  def type({:=, _, [operand1, operand2]}, _env), do: TypeComparator.supremum(operand1, operand2)
 
   # literals
   def type(value, _env) do
@@ -91,13 +91,6 @@ defmodule Typelixir.PatternBuilder do
     end
   end
 
-  defp get_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_vars(x, type) end)
-
-  defp get_vars([], {:list, _type}), do: []
-
-  defp get_vars({:|, _, [operand1, operand2]}, {:list, type}),
-    do: [get_vars(operand1, type), get_vars(operand2, {:list, type})]
-
   defp get_vars(_, :any), do: []
 
   defp get_vars({:_, _, _}, _type), do: []
@@ -105,22 +98,41 @@ defmodule Typelixir.PatternBuilder do
   defp get_vars({:=, _, [operand1, operand2]}, type), 
     do: [get_vars(operand1, type), get_vars(operand2, type)]
 
+  defp get_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_vars(x, type) end)
+
+  defp get_vars([], {:list, _type}), do: []
+
+  defp get_vars({:|, _, [operand1, operand2]}, {:list, type}),
+    do: [get_vars(operand1, type), get_vars(operand2, {:list, type})]
+
+  defp get_vars(_, {:list, _}), do: {:error, "Parameters does not match type specification"}
+
+  defp get_vars([], _), do: {:error, "Parameters does not match type specification"}
+
+  defp get_vars({:|, _, _}, _), do: {:error, "Parameters does not match type specification"}
+
   defp get_vars({op, _, _}, type) when (op not in [:{}, :%{}]), do: {op, type}
 
   defp get_vars({:{}, _, ops}, {:tuple, type_list}), do: get_vars_tuple(ops, type_list)
 
+  defp get_vars({:{}, _, _}, _), do: {:error, "Parameters does not match type specification"}
+
+  defp get_vars({:%{}, _, op}, {:map, {_, value_types}}), do: Enum.zip(op, value_types) |> Enum.map(fn {{_, value}, value_type} -> get_vars(value, value_type) end)
+
+  defp get_vars({:%{}, _, _}, _), do: {:error, "Parameters does not match type specification"}
+
+  defp get_vars(_, {:map, {_, _}}), do: {:error, "Parameters does not match type specification"}
+
   defp get_vars(ops, {:tuple, type_list}) when is_tuple(ops), do: get_vars_tuple(Tuple.to_list(ops), type_list)
 
-  defp get_vars({:%{}, _, op}, {:map, {_, value_type}}) do
-    (Enum.map(op, fn {_, value} -> value end) |> Enum.map(fn x -> get_vars(x, value_type) end))
-  end
-
+  defp get_vars(_, {:tuple, _}), do: {:error, "Parameters does not match type specification"}
+  
   defp get_vars(value, type) when (type in [:string, :boolean, :integer, :float, :atom, :any]) do
     cond do
       type === :any or 
       (is_boolean(value) and type === :boolean) or
       (is_bitstring(value) and type === :string) or
-      (is_integer(value) and type === :integer) or
+      (is_integer(value) and (type === :integer or type === :float)) or
       (is_float(value) and type === :float) or
       (is_atom(value) and type === :atom) 
         -> []
