@@ -2,12 +2,12 @@ defmodule Typelixir.TypeComparator do
   # ---------------------------------------------------------------------------------------------------
   # subtype? -> returns true if type1 is subtype of type2
 
-  def subtype?(type1, type2) when type1 === type2, do: true
-  
   def subtype?(list_type) when (is_list(list_type)) do
     types = Enum.map(list_type, fn {type1, type2} -> subtype?(type1, type2) end)
     if Enum.member?(types, :error), do: :error, else: not Enum.member?(types, false)
   end
+
+  def subtype?(type1, type2) when type1 === type2, do: true
 
   def subtype?({:map, {key_type1, list_value_type1}}, {:map, {key_type2, list_value_type2}}) do 
     if length(list_value_type1) >= length(list_value_type2) do
@@ -46,12 +46,12 @@ defmodule Typelixir.TypeComparator do
   # ---------------------------------------------------------------------------------------------------
   # supremum -> returns the supremum between type1 and type2
 
+  def supremum(list_type) when is_list(list_type), do: Enum.reduce(list_type, fn acc, e -> supremum(acc, e) end)
+  
   def supremum(type1, type2) when type1 === type2, do: type1
 
   def supremum(list_type1, list_type2) when is_list(list_type1) and is_list(list_type2), 
     do: Enum.zip(list_type1, list_type2) |> Enum.map(fn {x, y} -> supremum(x, y) end)
-
-  def supremum(list_type) when is_list(list_type), do: Enum.reduce(list_type, fn acc, e -> supremum(acc, e) end)
 
   def supremum({:map, {key_type1, list_value_type1}}, {:map, {key_type2, list_value_type2}}), do: 
     if (length(list_value_type1) >= length(list_value_type2)), do: 

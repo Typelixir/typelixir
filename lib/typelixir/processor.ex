@@ -1,7 +1,7 @@
 defmodule Typelixir.Processor do
   @moduledoc false
 
-  alias Typelixir.{PatternBuilder, TypeComparator, PreProcessor, Utils}
+  alias Typelixir.{PatternBuilder, TypeComparator, Utils}
 
   # FIRST
   # ---------------------------------------------------------------------------------------------------
