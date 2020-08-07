@@ -2,10 +2,15 @@
 
 ## Introduction
 
-Elixir posseses some basic types, such as `integer`, `float`, `string`, `boolean` and `atom`, which are dynamically checked at runtime.
-The aim of this library is to introduce a type system in order to perform static typing on expressions of both basic types and structured types. Besides the basic types, our type system manipulates types for `lists`, `tuples`, `maps` and `functions`. We also include the type `any`, the type of all terms, and `none` (empty type). 
+Elixir posseses some basic types such as `integer`, `float`, `string`, `boolean` and `atom` which are dynamically type checked at runtime.
 
-List types are checket, heterogeneous list are not allowed, the following list generates type error:
+The aim of this library is to introduce a type system in order to perform static typing on expressions of both basic types and structured types. Besides the basic types, our type system manipulates types for `lists`, `tuples`, `maps` and `functions`. We also include the type `any` as the supertype of all terms, and `none` as the empty type.
+
+Below there are some examples of how the library type check the code (but they are not extensive to all use cases, so if in doubt, give it a try!).
+
+## Structured types
+
+Heterogeneous lists are not allowed. The following list generates a type error:
 
 ```elixir
 [1, "two", :three ]   # wrong
@@ -15,69 +20,49 @@ Only homogeneous lists are allowed, like the following ones:
 
 ```elixir
 [1, 2, 3]   # list of integer
-[[1, 2], [3, 4], [5, 6]]   # list of integer's lists
+[[1, 2], [3, 4], [5, 6]]   # list of integers lists
 ```
 
-For maps, all keys must have the same type but each value could have its own type:
+For maps, all keys must have the same type but each value can have its own type:
 
 ```elixir
 %{:age => 12, name: "John" }   # map with atom keys
 %{1 => 12, name: => "John" }   # wrong
 ```
 
-For tuples, each element has its own type as are defined in Elixir:
+For tuples, each element has its own type:
 
 ```elixir
 {12, "John"}   # duple where the first element is an integer and the second a string
 ```
 
-Also, integer type can be used as float type:
+Last, integer type can be used as float because it is a subtype of it:
 
 ```elixir
 [1, 1.5, 2]   # list of float
 %{1 => "one", 1.5 => "one dot five" }   # map with float keys
 ```
 
-## Generic expressions
+## Expressions
 
-Expresions are also typechecked. For arithmetic expressions are expected `float` or `integer` types. 
+For boolean expressions like `and`, `or` and `not` boolean types are expected:
 
-The following are all correct expressions: 
-
-```elixir
-3.4 + 5.6   # float
-4 + 5   # integer
-4.0 + 5   # float
-```
-
-However, the following generates a type error:
-```elixir
-3 + "hi"   # wrong
-```
-
-For boolean expresions (`and`, `or` and `not`) boolean types are expected:
 ```elixir
 true and false   # false
 true and (0 < 1)   # true
 true or 1   # wrong
 ```
 
-In the case of comparison operators we are more flexible, following Elixir's philosophy. We allow any values, even of different types, to be compared with each other. However, the return type is `boolean`.
-Therefore:
+In the case of comparison operators we are more flexible, following Elixir's philosophy. We allow any value even of different types to be compared with each other. However, the return type is always boolean. Therefore:
+
 ```elixir
 ("hi" > 5.0) or false   # true
 ("hi" > 5.0) * 3   # wrong
 ```
 
-We cannot deconstruct a list with, for instance, a tuple pattern. Thus, such patterns are wrongly typed:
-```elixir
-{x, y} = [1, 2]   # wrong 
-```
-
 For `case` sentences, the expression in the case has to have the same type as the guards, and the return type of all guards must have the same type:
 
 ```elixir
-
 case 1 > 0 do
   true -> 1
   false -> 1.5
@@ -99,13 +84,16 @@ case 1 + 2 do
 end # wrong
 ```
 
-The behavior for the `if` sentence is the same. For the `cond` sentence, a boolean condition is expected on each guard.
+The behavior for `if` and `unless` is the same and for the `cond` sentence, a boolean condition is expected always on each guard.
 
 ## Function specifications
 
-The library uses the reserved word `@spec` for functions specs. There is no other type annotation introduced. 
+The library uses the reserved word `@spec` for functions specs.
 
-One of the main objectives of the design of our type system is to be backward compatible, to allow working with legacy code. To do so we allow the existence of `untyped functions`. An untyped function is a function that does not have an `@spec` specification.
+It doesn't type check functions defined with `when` conditions, they will be checked at runtime as Elixir does.
+
+One of the main objectives of the design of our type system is to be backward compatible to allow working with legacy code. To do so, we allow the existence of `untyped functions`. 
+We can also see them as functions that doesn't have a `@spec` specification.
 
 In the following example we define a function that takes an integer and returns a float:
 
@@ -116,18 +104,20 @@ def func1(x) do
 end
 ```
 
-Function `func` can be correctly applied to an integer:
+Function `func1` can be correctly applied to an integer:
+
 ```elixir
 func1(2)   # 84.0
 ```
 
-but other kinds of applications would fail:
+But other kinds of applications will fail:
+
 ```elixir
 func1(2.0)   # wrong
 func1("2")   # wrong
 ```
 
-We can also define functions using the type `any` to avoid the typecheck:
+We can also define functions using the `any` type to avoid the type check:
 
 ```elixir
 @spec func2(any) :: boolean
@@ -136,7 +126,7 @@ def func2(x) do
 end
 ```
 
-Every type is subtype of this type so this function can be called with any value:
+All types are subtype of this one, so this function can be called with any value:
 
 ```elixir
 func2(1)   # true
@@ -144,19 +134,20 @@ func2("one")   # true
 func2([1, 2, 3])   # true
 ```
 
-If we want to specify a function with a list of integer as parameter we write:
+If we want to specify a function with a list of integers as parameter we write:
 
 ```elixir
 @spec func3([integer]) :: integer
 def func3([]) do
-    0
+  0
 end
+
 def func3([head|tail]) do
-    1 + func3(tail)
+  1 + func3(tail)
 end
 ```
 
-This function can be called with:
+This function can be called:
 
 ```elixir
 func3([])   # 0
@@ -182,7 +173,7 @@ def func4([head|tail]) do
 end
 ```
 
-Some calls to this function are:
+So now we can have `func4` calls like the following:
 
 ```elixir
 func4([])   # 0
@@ -193,7 +184,7 @@ func4([:one, :two, :three])   # 3
 func4([1, :two, "three"])   # wrong
 ```
 
-A map with more key-value pairs can be used insted of a map with less entries. The next function is applicable to maps that have at least one key-value pair, with atom keys and the first value has atom type:
+A map with more key-value pairs can be used instead of a map with less entries. The next function is applicable to maps that have at least one key-value pair, with atom keys and the first value has atom type:
 
 ```elixir
 @spec func5(%{atom => atom}) :: boolean
@@ -202,7 +193,7 @@ def func5(map) do
 end
 ```
 
-So, this function can be called with:
+So this function can be called with:
 
 ```elixir
 func5(%{:key1=>:three, :key2=>:three, :key3=>"three"})   # false
@@ -213,8 +204,7 @@ func5(%{:key1=>:one, "two"=>:two, 3=>:three})   # wrong -> keys have different t
 func5(%{})   # wrong -> has less key-value pairs
 ```
 
-If we want to specify a function that takes a map with any key type as param we can use the `none` type because, as it is usual, maps are covariant on its key and we have to use the lower type. We can also say that the fist elem has to have type `any` to admit maps with any value types.
-
+If we want to specify a function that takes a map with any key type as param we can use the `none` type because, as it is usual, maps are `covariant` on its key and we have to use the lower type. We can also say that the first elem has to have type `any` to admit maps with any value types:
 
 ```elixir
 @spec func6(%{none => any}) :: boolean
@@ -223,7 +213,7 @@ def func6(map) do
 end
 ```
 
-Some invocation to this function are:
+Some invocations to this function are:
 
 ```elixir
 func6(%{"one"=>:one, "two"=>2, "three"=>"three"})   # false
@@ -232,28 +222,10 @@ func6(%{:key1=>:one, :key2=>2, :key3=>"three"})   # true
 func6(%{:key1=>:one, :key2=>:two, :key3=>:three})   # false
 
 func6(%{1=>:one, :two=>2, "three"=>"three"})   # wrong -> keys have different types
-func5(%{})   # wrong -> has less key-value pairs
+func6(%{})   # wrong -> has less key-value pairs
 ```
 
-If we want to define a function that receives a tuple where the first elem could have any type but the second has to be an integer we can define:
-
-```elixir
-@spec func7({any, integer}) :: boolean
-def func7({x, y}) do
-    y > 2
-end
-```
-
-We can invoke this function as:
-
-```elixir
-func7({1, 1})   # false
-func7({2, 3})   # true
-func7({:two, 3})   # true
-func7({"one", 4})   # true
-
-func7({5,"three"})   # wrong
-```
+### Return types
 
 If we don't want to specify the return type we can denote it as `any`:
 
@@ -295,26 +267,36 @@ func9([:one, :two])   # [:two]
 func9([{1,"one"}, {2,"two"}, {3,"three"}])   # [{2,"two"}, {3,"three"}]
 func9([%{1 => 3}, %{2 => "4"}, %{3 => :cinco}])   # [%{2 => "4"}, %{3 => :cinco}]
 ```
-In the same way, this behavior can be obtained for maps and tuples. For maps and tuples of one element we can use the types `%{none => any}` and `{any}`.
+In the same way, this behavior can be obtained for maps and tuples.
 
-Is responsability of the developer the definition of this kind of functions. Expressions with `any` type can be used anywhere as any type so, we could have:
+### Runtime errors
+
+Expressions with `any` type can be used anywhere so we could have:
 
 ```elixir
 func3(func9([0,1]))   # 2
 func3(func9(['a', 'b']))   # runtime error
 ```
 
-Statically both functions are correctly typechecked, but dynamically the second one will fail with type error.
+Statically both functions are correctly type checked but dynamically the second one will fail.
 
-As we mentioned before, functions without type specification have the same behaviour. For example, the following expression correctly typechecks:
+As we mentioned before, functions without type specification have the same behaviour. For example, the following expression type checks correctly:
 
 ```elixir
 id(8) + 10               # 18
 ```
 
-However, the following expressions typecheck, but fail at runtime:
+But the following will fail at runtime:
 
 ```elixir
 "hello" <> Main.fact(9)  # runtime error
 id(8) and true           # runtime error
 ```
+
+## Closing thoughts
+
+We strongly believe that there's a lot of room for further research and improvement of the language in this area.
+
+The library is not extensive to all the language, we are missing some important operators such as `|>` or the mentioned `when`.
+
+It's a proof of concept, the scope of this work is just to cover the expectations of a degree project.
