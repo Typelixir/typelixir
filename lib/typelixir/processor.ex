@@ -1,98 +1,176 @@
 defmodule Typelixir.Processor do
   @moduledoc false
 
-  alias Typelixir.{TypeBuilder, TypeComparator, PreProcessor}
+  alias Typelixir.{PatternBuilder, TypeComparator, Utils}
 
   # FIRST
   # ---------------------------------------------------------------------------------------------------
 
-  def process_file(path, env) do 
-    modules_functions = PreProcessor.process_file(path, env[:modules_functions])
+  def process_file(path, env) do
     ast = Code.string_to_quoted(File.read!(Path.absname(path)))
-    
-    # while developing to see the info in the console
-    IO.puts "#{path} ast:"
-    IO.inspect ast
-    
-    {_ast, result} = Macro.prewalk(ast, %{env | modules_functions: modules_functions}, &process(&1, &2))
-    prepare_result_data(result)
+
+    {_ast, result} = Macro.prewalk(ast, env, &process(&1, &2))
+    Utils.prepare_result_data(result)
   end
 
-  # NEEDS COMPILE
+  # BASE CASES
   # ---------------------------------------------------------------------------------------------------
 
-  defp process(elem, %{:state => :needs_compile, :data => _, :module_name => _, :vars => _, :modules_functions => _} = env), do: {elem, env}
+  # error
+  defp process(elem, %{
+    state: :error,
+    type: _,
+    error_data: _,
+    warnings: _,
+    data: _,
+    prefix: _,
+    vars: _,
+    functions: _
+  } = env), do: {elem, env}
 
-  # MODULES
+  # block
+  defp process({:__block__, _, _} = elem, env), do: {elem, env}
+
+  # DEFMODULE
   # ---------------------------------------------------------------------------------------------------
 
-  # {:defmodule, _, MODULE}
-  defp process({:defmodule, _, [{:__aliases__, _, [module_name]} | [[_tail]]]} = elem, env) do
-    {elem, %{env | module_name: module_name}}
+  defp process({:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: block]]}, env) do
+    elem = {:defmodule, [line: line], [{:__aliases__, meta, module_name}, [do: {:__block__, [], []}]]}
+    
+    name = 
+      module_name 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+    new_mod_name = if env[:prefix], do: env[:prefix] <> "." <> name, else: name
+    
+    {_ast, result} = Macro.prewalk(block, %{env | vars: %{}, prefix: new_mod_name}, &process(&1, &2)) 
+    result = Utils.prepare_result_data(result)
+
+    {elem, result}
   end
 
-  # MODULES INTERACTION
+  # IMPORT
   # ---------------------------------------------------------------------------------------------------
 
-  # {{:., _, [{:__aliases__, _, [module_name]}, fn_name]}, _, args}
-  defp process({{:., [line: line], [{:__aliases__, _, mod_names}, fn_name]}, _, args} = elem, env) do
-    mod_name = List.last(mod_names)
-    if (env[:modules_functions][mod_name][fn_name]) do
-      type_of_args_caller = Enum.map(args, fn type -> TypeBuilder.build(type, %{vars: env[:vars], mod_name: env[:module_name], mod_funcs: env[:modules_functions]}) end)
-      type_of_args_callee = elem(env[:modules_functions][mod_name][fn_name], 1)
-      return_type = elem(env[:modules_functions][mod_name][fn_name], 0)
+  defp process({:import, [line: line], [{:__aliases__, _, module_name_ext}]}, env) do
+    elem = {:import, [line: line], []}
 
-      case is_error_with_float_to_int_type?(type_of_args_caller, type_of_args_callee) do
-        true -> return_error(elem, env, line, "Type error on function call #{mod_name}.#{fn_name}")
-        _ -> 
-          case TypeComparator.less_or_equal?(type_of_args_caller, type_of_args_callee) do
-            true -> return_type(elem, env, return_type)
-            _ -> 
-              case TypeComparator.has_type?(type_of_args_callee, nil) do
-                true -> return_type(elem, env, return_type)
-                _ -> return_error(elem, env, line, "Type error on function call #{mod_name}.#{fn_name}")
-              end
-          end
-      end
-    else 
-      return_type(elem, env, nil)
+    module_name = 
+      module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], env[:prefix], Map.merge(env[:functions][env[:prefix]], env[:functions][module_name]))}}
     end
   end
 
-  # USE, IMPORT, ALIAS, REQUIRE
+  # ALIAS
   # ---------------------------------------------------------------------------------------------------
 
-  # {:import, _, [{:__aliases__, _, [module_name]}]}
-  defp process({:import, _, [{:__aliases__, _, module_name_ext}]} = elem, env) do
-    [head | _] = module_name_ext
-    if !env[:modules_functions][head] do
-      {elem, %{env | state: :needs_compile, data: head}}
-    else
-      {elem, env}
+  defp process({:alias, [line: line], [{:__aliases__, _, module_name_ext}]}, env) do
+    elem = {:alias, [line: line], []}
+
+    module_name = 
+      module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], Atom.to_string(Enum.at(module_name_ext, -1)), env[:functions][module_name])}}
     end
+  end
+
+  defp process({:alias, [line: line], [{:__aliases__, _, module_name_ext}, [as: {:__aliases__, _, as_module_name_ext}]]}, env) do
+    elem = {:alias, [line: line], []}
+
+    module_name = 
+      module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+    
+    as_module_name = 
+      as_module_name_ext 
+      |> Enum.map(fn name -> Atom.to_string(name) end) 
+      |> Enum.join(".")
+
+    case env[:functions][module_name] do
+      nil -> {elem, env}
+      _ -> {elem, %{env | functions: Map.put(env[:functions], as_module_name, env[:functions][module_name])}}
+    end
+  end
+
+  # FUNCTIONS DEF
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({:@, [line: line], [{:spec, _, [{:::, _, [{_fn_name, _, _type_of_args}, _type_of_return]}]}]}, env) do
+    elem = {:@, [line: line], []}
+    {elem, env}
+  end
+
+  defp process({defs, [line: line], [{function_name, _meta, params}, [do: block]]}, env) when (defs in [:def, :defp]) do
+    elem = {defs, [line: line], []}
+    
+    params_length = length(params)
+    fn_key = {function_name, params_length}
+
+    case env[:functions][env[:prefix]][fn_key] do
+      nil ->
+        {_ast, result} = Macro.prewalk(block, %{env | vars: %{}}, &process(&1, &2))
+        result = Utils.prepare_result_data(result)
+
+        {elem, result}
+      _ -> 
+        return_type = env[:functions][env[:prefix]][fn_key] |> elem(0)
+        param_type_list = env[:functions][env[:prefix]][fn_key] |> elem(1)
+        params_vars = PatternBuilder.vars(params, param_type_list)
+
+        case params_vars do
+          {:error, msg} -> Utils.return_error(elem, env, {line, msg})
+          _ ->
+            {_ast, result} = Macro.prewalk(block, %{env | vars: params_vars}, &process(&1, &2))
+            result = Utils.prepare_result_data(result)
+            
+            case result[:state] do
+              :error -> {elem, result}
+              _ ->
+                case TypeComparator.supremum(result[:type], return_type) do
+                  :error -> Utils.return_error(elem, result, {line, "Body doesn't match function type on #{function_name}/#{params_length} declaration"})
+                  _ -> {elem, result}
+                end
+            end
+        end
+    end
+  end
+
+  # FUNCTIONS CALL
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({{:., [line: line], [{:__aliases__, [line: line], mod_names}, fn_name]}, [line: line], args}, env) do
+    elem = {{:., [line: line], [{:__aliases__, [line: line], []}, fn_name]}, [line: line], []} 
+    function_call_process(elem, line, mod_names, fn_name, args, env)
   end
 
   # BINDING
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({:=, [line: line], [operand1, operand2]} = elem, env) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_name: env[:module_name], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_name: env[:module_name], mod_funcs: env[:modules_functions]})
+  defp process({:=, [line: line], [pattern, expression]}, env) do
+    elem = {:=, [line: line], []}
 
-    case is_error_with_float_to_int?(operand1, type_operand1, operand2, type_operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]}) do
-      true -> return_error(elem, env, line, "Type error on = operator")
+    {_ast, result} = Macro.prewalk(expression, env, &process(&1, &2))
+    result = Utils.prepare_result_data(result)
+    
+    case result[:state] do
+      :error -> {elem, result}
       _ -> 
-        case TypeComparator.less_or_equal?(type_operand2, type_operand1) do
-          true -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, type_operand2, line, "Right side of = doesn't have a defined type")
-              _ -> 
-                vars = TypeBuilder.add_variables(operand1, type_operand1, operand2, type_operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-                return_type(elem, %{env | vars: vars}, type_operand2)
-            end
-          _ ->
-            vars = TypeBuilder.add_variables(operand1, type_operand1, operand2, type_operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-            return_type(elem, %{env | vars: vars}, type_operand2)
+        pattern = if is_list(pattern), do: pattern, else: [pattern]
+        pattern_vars = PatternBuilder.vars(pattern, [result[:type]])
+
+        case pattern_vars do
+          {:error, msg} -> Utils.return_error(elem, env, {line, msg})
+          _ -> Utils.return_merge_vars(elem, result, pattern_vars)
         end
     end
   end
@@ -100,287 +178,440 @@ defmodule Typelixir.Processor do
   # NUMBER OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:*, :+, :/, :-]) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    return_type = TypeComparator.greater(type_operand1, type_operand2)
-
-    case is_error?(type_operand1, type_operand2, :float) do
-      true -> return_error(elem, env, line, "Type error on #{Atom.to_string(operator)} operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, return_type, line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")
-          _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, return_type, line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")
-              _ -> return_type(elem, env, return_type)
-            end
-        end
-    end
+  defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:*, :+, :-]) do
+    elem = {operator, [line: line], []}
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, false)
   end
 
-  # Neg
-  defp process({:-, [line: line], [operand]} = elem, env) do
-    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+  defp process({:/, [line: line], [operand1, operand2]}, env) do
+    elem = {:/, [line: line], []}
+    binary_operator_process(elem, env, line, :/, operand1, operand2, :float, false)
+  end
 
-    case is_error?(type_operand, :float) do
-      true -> return_error(elem, env, line, "Type error on - operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand, nil) do
-          true -> return_warning(elem, env, type_operand, line, "Argument of - doesn't have a defined type")
-          _ -> return_type(elem, env, type_operand)
-        end
-    end
+  # neg
+  defp process({:-, [line: line], [operand]}, env) do
+    elem = {:-, [line: line], []}
+    unary_operator_process(elem, env, line, :-, operand, :integer)
   end
 
   # BOOLEAN OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:and, :or]) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-
-    case is_error?(type_operand1, type_operand2, :boolean) do
-      true -> return_error(elem, env, line, "Type error on #{Atom.to_string(operator)} operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, :boolean, line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")
-          _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, :boolean, line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")
-              _ -> return_type(elem, env, :boolean)
-            end
-        end
-    end
+  defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:and, :or]) do
+    elem = {operator, [line: line], []}
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, false)
   end
 
-  # Not
-  defp process({:not, [line: line], [operand]} = elem, env) do
-    type_operand = TypeBuilder.build(operand, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-
-    case is_error?(type_operand, :boolean) do
-      true -> return_error(elem, env, line, "Type error on not operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand, nil) do
-          true -> return_warning(elem, env, :boolean, line, "Argument of not doesn't have a defined type")
-          _ -> return_type(elem, env, :boolean)
-        end
-    end
+  # not
+  defp process({:not, [line: line], [operand]}, env) do
+    elem = {:not, [line: line], []}
+    unary_operator_process(elem, env, line, :not, operand, :boolean)
   end
 
   # COMPARISON OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({operator, [line: line], [operand1, operand2]} = elem, env) when (operator in [:==, :!=, :>, :<, :<=, :>=, :===, :!==]) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-
-    case is_error_compare_them?(type_operand1, type_operand2) do
-      true -> return_error(elem, env, line, "Type error on #{Atom.to_string(operator)} operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, :boolean, line, "Left side of #{Atom.to_string(operator)} doesn't have a defined type")
-          _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, :boolean, line, "Right side of #{Atom.to_string(operator)} doesn't have a defined type")
-              _ -> return_type(elem, env, :boolean)
-            end
-        end
-    end
+  defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:==, :!=, :>, :<, :<=, :>=, :===, :!==]) do
+    elem = {operator, [line: line], []}
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :any, true)
   end
 
   # LIST OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  # Concat
-  defp process({:++, [line: line], [operand1, operand2]} = elem, env) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    return_type = TypeComparator.greater(type_operand1, type_operand2)
-
-    case is_error_list?(type_operand1, type_operand2) do
-      true -> return_error(elem, env, line, "Type error on ++ operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, return_type, line, "Left side of ++ doesn't have a defined type")
-          _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, return_type, line, "Right side of ++ doesn't have a defined type")
-              _ -> return_type(elem, env, return_type)
-            end
-        end
-    end
-  end
-
-  # Diff
-  defp process({:--, [line: line], [operand1, operand2]} = elem, env) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-
-    case is_error_list?(type_operand1, type_operand2) do
-      true -> return_error(elem, env, line, "Type error on -- operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, type_operand1, line, "Left side of -- doesn't have a defined type")
-          _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, type_operand1, line, "Right side of -- doesn't have a defined type")
-              _ -> 
-                case TypeComparator.less_or_equal?(type_operand1, type_operand2) and 
-                      TypeComparator.less_or_equal?(type_operand2, type_operand1) do
-                  true -> return_type(elem, env, type_operand1)
-                  _ -> return_error(elem, env, line, "Type error on -- operator")
-                end
-            end
-        end
-    end
+  defp process({operator, [line: line], [operand1, operand2]}, env) when operator in [:++, :--] do
+    elem = {operator, [line: line], []}
+    binary_operator_process(elem, env, line, operator, operand1, operand2, {:list, :any}, false)
   end
 
   # STRING OPERATORS
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({:<>, [line: line], [operand1, operand2]} = elem, env) do
-    type_operand1 = TypeBuilder.build(operand1, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
-    type_operand2 = TypeBuilder.build(operand2, %{vars: env[:vars], mod_funcs: env[:modules_functions]})
+  defp process({:<>, [line: line], [operand1, operand2]}, env) do
+    elem = {:<>, [line: line], []}
+    binary_operator_process(elem, env, line, :<>, operand1, operand2, :string, false)
+  end
 
-    case is_error?(type_operand1, type_operand2, :string) do
-      true -> return_error(elem, env, line, "Type error on <> operator")
-      _ -> 
-        case TypeComparator.has_type?(type_operand1, nil) do
-          true -> return_warning(elem, env, :string, line, "Left side of <> doesn't have a defined type")
+  # IF/UNLESS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp process({operator, [line: line], [condition, [do: do_block]]}, env) when operator in [:if, :unless] do
+    elem = {operator, [line: line], []}
+    
+    {_ast, result_condition} = Macro.prewalk(condition, env, &process(&1, &2))
+    result_condition = Utils.prepare_result_data(result_condition)
+    
+    case result_condition[:state] do
+      :error -> {elem, result_condition}
+      _ ->
+        case TypeComparator.supremum(result_condition[:type], :boolean) do
+          :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
           _ -> 
-            case TypeComparator.has_type?(type_operand2, nil) do
-              true -> return_warning(elem, env, :string, line, "Right side of <> doesn't have a defined type")
-              _ -> return_type(elem, env, :string)
+            {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
+            result_do_block = Utils.prepare_result_data(result_do_block)
+
+            case result_do_block[:state] do
+              :error -> {elem, result_do_block}
+              _ -> Utils.return_merge_vars(elem, %{env | type: result_do_block[:type]}, result_condition[:vars])
             end
         end
     end
   end
 
-  # FUNCTION DEFINITION
+  defp process({operator, [line: line], [condition, [do: do_block, else: else_block]]}, env) when operator in [:if, :unless] do
+    elem = {operator, [line: line], []}
+    
+    {_ast, result_condition} = Macro.prewalk(condition, env, &process(&1, &2))
+    result_condition = Utils.prepare_result_data(result_condition)
+    
+    case result_condition[:state] do
+      :error -> {elem, result_condition}
+      _ ->
+        case TypeComparator.supremum(result_condition[:type], :boolean) do
+          :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
+          _ -> 
+            {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
+            result_do_block = Utils.prepare_result_data(result_do_block)
+            
+            case result_do_block[:state] do
+              :error -> {elem, result_do_block}
+              _ -> 
+                {_ast, result_else_block} = Macro.prewalk(else_block, result_condition, &process(&1, &2))
+                result_else_block = Utils.prepare_result_data(result_else_block)
+                
+                case result_else_block[:state] do
+                  :error -> {elem, result_else_block}
+                  _ ->
+                    case TypeComparator.supremum(result_do_block[:type], result_else_block[:type]) do
+                      :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} branches"})
+                      type -> Utils.return_merge_vars(elem, %{env | type: type}, result_condition[:vars])
+                    end
+                end
+            end
+        end 
+    end
+  end
+
+  # COND 
+  # ---------------------------------------------------------------------------------------------------
+  
+  defp process({:cond, [line: line], [[do: branches]]}, env) do
+    elem = {:cond, [line: line], []}
+
+    Enum.reduce_while(branches, {elem, %{env | type: :any}}, 
+      fn {:->, [line: line], [[condition], do_block]}, {elem, acc_env} ->
+        {_ast, result_condition} = Macro.prewalk(condition, acc_env, &process(&1, &2))
+        result_condition = Utils.prepare_result_data(result_condition)
+        
+        case result_condition[:state] do
+          :error -> {:halt, {elem, result_condition}}
+          _ ->
+            case TypeComparator.supremum(result_condition[:type], :boolean) do
+              :error -> {:halt, Utils.return_error(elem, acc_env, {line, "Type error on cond condition"})}
+              _ -> 
+                {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
+                result_do_block = Utils.prepare_result_data(result_do_block)
+
+                case result_do_block[:state] do
+                  :error -> {:halt, {elem, result_do_block}}
+                  _ -> 
+                    case TypeComparator.supremum(result_do_block[:type], acc_env[:type]) do
+                      :error -> {:halt, Utils.return_error(elem, acc_env, {line, "Type error on cond branches"})}
+                      type -> {:cont, {elem, %{acc_env | type: type}}}
+                    end
+                end
+            end
+        end
+      end)
+  end
+
+  # CASE
   # ---------------------------------------------------------------------------------------------------
 
-  defp process({defs, [line: line], [{function_name, meta, params}, [do: block]]}, env) when (defs in [:def, :defp]) do
-    elem = {defs, [line: line], [{function_name, meta, params}, [do: {:__block__, [], []}]]}
+  defp process({:case, [line: line], [condition, [do: branches]]}, env) do
+    elem = {:case, [line: line], []}
 
-    case env[:modules_functions][env[:module_name]][function_name] do
-      nil ->
-        {_ast, result} = Macro.prewalk(block, %{env | vars: %{}}, &process(&1, &2))
-        result = prepare_result_data(result)
-        case result[:state] do
-          :error -> 
-            return_error(elem, env, elem(result[:data], 0), elem(result[:data], 1))
-          :ok -> return_merge_warning(elem, env, nil, result[:warnings])
-          _ -> return_type(elem, %{env | state: result[:state], data: result[:data]}, nil)
-        end
+    {_ast, result_condition} = Macro.prewalk(condition, env, &process(&1, &2))
+    result_condition = Utils.prepare_result_data(result_condition)
+        
+    case result_condition[:state] do
+      :error -> {elem, result_condition}
+      _ ->
+        Enum.reduce_while(branches, {elem, %{env | vars: Map.merge(env[:vars], result_condition[:vars]), type: :any}}, 
+          fn {:->, [line: line], [[pattern], do_block]}, {elem, acc_env} ->
+            pattern = if is_list(pattern), do: pattern, else: [pattern]
+            pattern_vars = PatternBuilder.vars(pattern, [result_condition[:type]])
+
+            case pattern_vars do
+              {:error, msg} -> {:halt, Utils.return_error(elem, env, {line, msg})}
+              _ -> 
+                {_ast, result_do_block} = Macro.prewalk(do_block, %{acc_env | vars: Map.merge(acc_env[:vars], pattern_vars)}, &process(&1, &2))
+                result_do_block = Utils.prepare_result_data(result_do_block)
+
+                case result_do_block[:state] do
+                  :error -> {:halt, {elem, result_do_block}}
+                  _ ->
+                    case TypeComparator.supremum(result_do_block[:type], acc_env[:type]) do
+                      :error -> {:halt, Utils.return_error(elem, acc_env, {line, "Type error on case branches"})}
+                      type -> {:cont, {elem, %{acc_env | type: type}}}
+                    end
+                end
+            end
+          end)
+    end
+  end
+
+  # LITERAL, VARIABLE, TUPLE, LIST, MAP
+  # ---------------------------------------------------------------------------------------------------
+
+  # tuple more 2 elems
+  defp process({:{}, [line: line], list}, env) do
+    elem = {:{}, [line: line], []}
+    
+    {types_list, result} = 
+      Enum.map(list, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
+      |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
+          result = Utils.prepare_result_data(result)
+          
+          case result[:state] do
+            :error -> {:halt, {[], result}}
+            _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
+          end
+        end)
+
+    {{:{}, [line: line], []}, %{result | type: {:tuple, types_list}}}
+  end
+
+  # map
+  defp process({:%{}, _, []} = elem, env), do: {elem, %{env | type: PatternBuilder.type(elem, env)}}
+
+  defp process({:%{}, [line: line], list}, env) do
+    elem = {:%{}, [line: line], []}
+    
+    keys = Enum.map(list, fn {k, _} -> k end)
+    values = Enum.map(list, fn {_, v} -> v end)
+
+    {type_key, result_key} = 
+      Enum.map(keys, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
+      |> Enum.reduce_while({:any, env}, fn result, {type_acc, env_acc} ->
+          result = Utils.prepare_result_data(result)
+          
+          case result[:state] do
+            :error -> {:halt, {:any, result}}
+            _ -> 
+              case TypeComparator.supremum(result[:type], type_acc) do
+                :error -> {:halt, Utils.return_error(elem, env, {line, "Malformed type map"})}
+                type -> {:cont, {type, elem(Utils.return_merge_vars([], env_acc, result[:vars]), 1)}}
+              end
+          end
+        end)
+
+    case result_key[:state] do
+      :error -> {elem, result_key}
       _ -> 
-        return_type = env[:modules_functions][env[:module_name]][function_name] |> elem(0)
-        param_type_list = env[:modules_functions][env[:module_name]][function_name] |> elem(1)
-        case length(params) === length(param_type_list) do
-          false -> return_error(elem, env, line, "Wrong number of params on #{function_name} declaration")
+        {types_values, result_value} = 
+          Enum.map(values, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
+          |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
+              result = Utils.prepare_result_data(result)
+              
+              case result[:state] do
+                :error -> {:halt, {[], result}}
+                _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
+              end
+            end)
+
+        {elem, %{result_value | type: {:map, {type_key, types_values}}, vars: Map.merge(result_key[:vars], result_value[:vars])}}
+    end
+  end
+
+  # map app
+  defp process({{:., [line: line], [Access, :get]}, meta, [map, key]}, env) do
+    elem = {{:., [line: line], [Access, :get]}, meta, []}
+    map_app_process(elem, line, map, key, env)
+  end
+
+  defp process({{:., [line: line], [map, key]}, meta, []}, env) do
+    elem = {{:., [line: line], []}, meta, []}
+    map_app_process(elem, line, map, key, env)
+  end
+
+  # variables or local function
+  defp process({value, [line: line], params}, env) do
+    elem = {value, [line: line], []}
+    case env[:vars][value] do
+      nil ->
+        if (env[:prefix] !== nil and is_list(params) and env[:functions][env[:prefix]][{value, length(params)}] !== nil) do
+          function_call_process(elem, line, [String.to_atom(env[:prefix])], value, params, env)
+        else
+          {elem, %{env | type: :any}} 
+        end
+      type -> {elem, %{env | type: type}}
+    end
+  end
+
+  # list
+  defp process([] = elem, env), do: {elem, %{env | type: PatternBuilder.type(elem, env)}}
+
+  defp process([{:|, [line: line], [operand1, operand2]}], env) do
+    elem = {:|, [line: line], []}
+    binary_operator_process(elem, env, line, :|, operand1, operand2, {:list, :any}, false)
+  end
+
+  defp process(elem, env) when is_list(elem) do
+    {type, result} = 
+      Enum.map(elem, fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
+      |> Enum.reduce_while({:any, env}, fn result, {type_acc, env_acc} ->
+          result = Utils.prepare_result_data(result)
+          
+          case result[:state] do
+            :error -> {:halt, {:any, result}}
+            _ -> 
+              case TypeComparator.supremum(result[:type], type_acc) do
+                :error -> {:halt, Utils.return_error(elem, env, {"", "Malformed type list"})} # line? :(
+                type -> {:cont, {type, elem(Utils.return_merge_vars([], env_acc, result[:vars]), 1)}}
+              end
+          end
+        end)
+
+    {[], %{result | type: {:list, type}}}
+  end
+
+  # tuple 2 elems
+  defp process({elem1, elem2} = elem, env) when (elem1 !== :ok) do
+    {types_list, result} = 
+      Enum.map([elem1, elem2], fn t -> elem(Macro.prewalk(t, env, &process(&1, &2)), 1) end)
+      |> Enum.reduce_while({[], env}, fn result, {types_list, env_acc} ->
+          result = Utils.prepare_result_data(result)
+          
+          case result[:state] do
+            :error -> {:halt, {[], result}}
+            _ -> {:cont, {types_list ++ [result[:type]], elem(Utils.return_merge_vars(elem, env_acc, result[:vars]), 1)}}
+          end
+        end)
+
+    {{}, %{result | type: {:tuple, types_list}}}
+  end
+
+  # literals
+  defp process(elem, env), do: {elem, %{env | type: PatternBuilder.type(elem, env)}}
+
+  # OTHERS
+  # ---------------------------------------------------------------------------------------------------
+
+  defp function_call_process(elem, line, mod_names, fn_name, args, env) do
+    mod_name = 
+      mod_names 
+        |> Enum.map(fn name -> Atom.to_string(name) end) 
+        |> Enum.join(".")
+    spec_type = env[:functions][mod_name][{fn_name, length(args)}]
+
+    if (spec_type) do
+      {result_type, type_args} = spec_type
+
+      args_check = Enum.reduce_while(Enum.zip(args, type_args), env, 
+        fn {arg, type}, acc_env ->
+          {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
+          result = Utils.prepare_result_data(result)
+          
+          case TypeComparator.supremum(result[:type], type) do
+            :error ->
+              {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Arguments does not match type specification on #{fn_name}/#{length(args)}")}}
+            _ -> {:cont, Map.merge(acc_env, result)}
+          end
+        end)
+      
+      case args_check[:state] do
+        :error -> {elem, args_check}
+        _ -> {elem, %{args_check | type: result_type}}
+      end
+    else
+      args_check = Enum.reduce(args, env, 
+        fn arg, acc_env ->
+          {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
+          Map.merge(acc_env, Utils.prepare_result_data(result))
+        end)
+
+      case args_check[:state] do
+        :error -> {elem, args_check}
+        _ -> {elem, %{args_check | type: :any}}
+      end
+    end
+  end
+
+  defp unary_operator_process(elem, env, line, operator, operand, max_type) do
+    {_ast, result} = Macro.prewalk(operand, env, &process(&1, &2))
+    result = Utils.prepare_result_data(result)
+    
+    case result[:state] do
+      :error -> {elem, result}
+      _ ->
+        supremum = TypeComparator.supremum(result[:type], max_type)
+        case supremum do
+          :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
+          _ -> {elem, %{result | type: supremum}}
+        end
+    end
+  end
+
+  defp binary_operator_process(elem, env, line, operator, operand1, operand2, max_type, is_comparison) do
+    {_ast, result_op1} = Macro.prewalk(operand1, env, &process(&1, &2))
+    result_op1 = Utils.prepare_result_data(result_op1)
+    
+    case result_op1[:state] do
+      :error -> {elem, result_op1}
+      _ ->
+        {_ast, result_op2} = Macro.prewalk(operand2, env, &process(&1, &2))
+        result_op2 = Utils.prepare_result_data(result_op2)
+
+        case result_op2[:state] do
+          :error -> {elem, result_op2}
           _ ->
-            env_vars_ext = TypeBuilder.get_new_vars_env(params, param_type_list)
-            case env_vars_ext do
-              :error -> return_error(elem, env, line, "Params doesn't match function type on #{function_name} declaration")
-              _ ->
-                {_ast, result} = Macro.prewalk(block, %{env | vars: env_vars_ext}, &process(&1, &2))
-                result = prepare_result_data(result)
-                case result[:state] do
-                  :error -> 
-                    return_error(elem, env, elem(result[:data], 0), elem(result[:data], 1))
-                  :ok ->
-                    case TypeComparator.less_or_equal?(result[:type], return_type) do
-                      true -> return_merge_warning(elem, env, result[:type], result[:warnings])
-                      false -> 
-                        case TypeComparator.has_type?(return_type, nil) do
-                          true -> return_merge_warning(elem, env, result[:type], result[:warnings])
-                          false -> return_error(elem, env, line, "Body doesn't match function type on #{function_name} declaration")
-                        end 
-                      :error ->  return_error(elem, env, line, "Body doesn't match function type on #{function_name} declaration")
-                    end 
-                    _ -> return_type(elem, %{env | state: result[:state], data: result[:data]}, result[:type])
+            cond do
+              is_comparison -> Utils.return_merge_vars(elem, %{result_op1 | type: :boolean}, result_op2[:vars])
+              true ->
+                type = 
+                  cond do
+                    operator === :| and is_tuple(result_op2[:type]) -> TypeComparator.supremum({:list, result_op1[:type]}, result_op2[:type])
+                    operator === :| -> {:list, TypeComparator.supremum(result_op1[:type], result_op2[:type])}
+                    true -> TypeComparator.supremum(result_op1[:type], result_op2[:type])
+                  end
+                
+                cond do
+                  TypeComparator.has_type?(type, :error) === true -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
+                  true ->
+                    supremum = TypeComparator.supremum(type, max_type)
+                    case supremum do
+                      :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
+                      _ -> Utils.return_merge_vars(elem, %{result_op1 | type: supremum}, result_op2[:vars])
+                    end
                 end
             end
         end
     end
   end
 
-  # BASE CASE
-  # ---------------------------------------------------------------------------------------------------
+  defp map_app_process(elem, line, map, key, env) do
+    {_ast, result_map} = Macro.prewalk(map, env, &process(&1, &2))
+    result_map = Utils.prepare_result_data(result_map)
 
-  defp process(elem, env), do: {elem, env}
+    case result_map[:state] do
+      :error -> {elem, result_map}
+      _ -> 
+        {_ast, result_key} = Macro.prewalk(key, env, &process(&1, &2))
+        result_key = Utils.prepare_result_data(result_key)
 
-  # OTHERS
-  # ---------------------------------------------------------------------------------------------------
-
-  defp prepare_result_data(result) do
-    case result[:state] do
-      :error ->
-        data_merged = Enum.reduce(Map.to_list(result[:error_data]), fn acc, e -> if elem(acc, 0) < elem(e, 0), do: acc, else: e end)
-        %{result | data: data_merged}
-      :ok -> %{result | data: result[:warnings]}
-      _ -> result
+        case result_key[:state] do
+          :error -> {elem, result_key}
+          _ -> 
+            case result_map[:type] do
+              {:map, {key_type, _value_types}} ->
+                case TypeComparator.supremum(result_key[:type], key_type) do
+                  :error -> Utils.return_error(elem, env, {line, "Expected #{key_type} as key instead of #{result_key[:type]}"})
+                  _ -> Utils.return_merge_vars(elem, %{result_map | type: :any}, result_key[:vars])
+                end
+              _ -> Utils.return_error(elem, env, {line, "Not accessing to a map"})
+            end
+        end
     end
-  end
-
-  defp is_error?(type_operand1, type) do
-    TypeComparator.has_type?(type_operand1, :error) or 
-    TypeComparator.less_or_equal?(type_operand1, type) === :error or
-    not TypeComparator.less_or_equal?(type_operand1, type)
-  end
-
-  defp is_error?(type_operand1, type_operand2, type) do
-    TypeComparator.has_type?(type_operand1, :error) or 
-    TypeComparator.has_type?(type_operand2, :error) or 
-    TypeComparator.less_or_equal?(type_operand1, type) === :error or
-    TypeComparator.less_or_equal?(type_operand2, type) === :error or
-    (not (TypeComparator.less_or_equal?(type_operand1, type) and 
-      TypeComparator.less_or_equal?(type_operand2, type)))
-  end
-
-  defp is_error_compare_them?(type_operand1, type_operand2) do
-    TypeComparator.has_type?(type_operand1, :error) or 
-    TypeComparator.has_type?(type_operand2, :error) or 
-    TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error or
-    (not (TypeComparator.less_or_equal?(type_operand1, type_operand2) or 
-    TypeComparator.less_or_equal?(type_operand2, type_operand1)))
-  end
-
-  defp is_error_list?(type_operand1, type_operand2) do
-    TypeComparator.has_type?(type_operand1, :error) or 
-    TypeComparator.has_type?(type_operand2, :error) or 
-    TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error
-  end
-
-  defp is_error_with_float_to_int_type?(type_operand1, type_operand2) do
-    TypeComparator.has_type?(type_operand1, :error) or 
-    TypeComparator.has_type?(type_operand2, :error) or 
-    TypeComparator.less_or_equal?(type_operand1, type_operand2) === :error or
-    (TypeComparator.has_type?(type_operand1, :float) and 
-    TypeComparator.float_to_int_type?(type_operand2, type_operand1))
-  end
-
-  defp is_error_with_float_to_int?(operand1, type_operand1, operand2, type_operand2, env) do
-    TypeComparator.has_type?(type_operand1, :error) or
-    TypeComparator.has_type?(type_operand2, :error) or
-    TypeComparator.less_or_equal?(type_operand2, type_operand1) === :error or
-    (TypeComparator.has_type?(type_operand2, :float) and
-      TypeComparator.float_to_int?(operand1, operand2, env))
-  end
-
-  defp return_error(elem, env, line, message) do
-    {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, message)}}
-  end
-
-  defp return_warning(elem, env, type, line, message) do
-    {elem, %{env | type: type, warnings: Map.put(env[:warnings], line, message)}}
-  end
-
-  defp return_merge_warning(elem, env, type, new_warnings) do
-    {elem, %{env | type: type, warnings: Map.merge(env[:warnings], new_warnings)}}
-  end
-
-  defp return_type(elem, env, type) do
-    {elem, %{env | type: type}}
   end
 end

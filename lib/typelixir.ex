@@ -1,59 +1,50 @@
 defmodule Typelixir do
   @moduledoc false
+  
+  require Typelixir.Utils
+  alias Typelixir.{FunctionsExtractor, Processor}
 
-  alias Typelixir.{ModuleNamesExtractor, Processor}
+  @env %{
+    state: :ok,
+    type: nil,
+    error_data: %{},
+    data: %{},
+    prefix: nil,
+    vars: %{},
+    functions: %{}
+  }
 
-  def check(all_paths) do
-    modules_paths = ModuleNamesExtractor.extract_modules_names(all_paths)
-    states = compile_files(all_paths, [], modules_paths, Map.new())
-    Enum.each(states, fn state -> print_state(state) end)
-    case Enum.filter(states, fn {_, status, _} -> status === :error end) do
-      [] -> :ok
-      errors -> {:error, Enum.map(errors, fn {path, _, error} -> "#{elem(error, 1)} in #{path}:#{elem(error, 0)}" end)}
-    end
-  end
+  def check(paths) do
+    env_functions = pre_compile_files(paths)
 
-  defp compile_files(paths, results, modules_paths, modules_functions) do
-    [head | tail] = paths
-    {path, state, data, modules_functions} = compile_file(head, modules_functions)
-
-    if state == :needs_compile do
-      new_paths = [modules_paths[data]] ++ Enum.filter(paths, fn e -> e != modules_paths[data] end)
-      compile_files(new_paths, results, modules_paths, modules_functions)
-    else
-      results = results ++ [{path, state, data}]
-      case tail do
-        [] -> results
-        rem_paths -> compile_files(rem_paths, results, modules_paths, modules_functions)
+    Typelixir.Utils.manage_results(env_functions[:results]) do
+      Typelixir.Utils.manage_results(compile_files(paths, env_functions[:functions])) do
+        IO.puts "#{IO.ANSI.green()}All type checks have passed\n"
+        :ok
       end
     end
   end
 
-  defp compile_file(path, modules_functions) do
-    env = %{
-      state: :ok,
-      type: nil,
-      error_data: %{},
-      warnings: %{},
-      data: %{},
-      module_name: :empty,
-      vars: %{},
-      modules_functions: modules_functions
-    }
-    result = Processor.process_file(path, env)
-    
-    # while developing to see the info in the console
-    IO.puts "#{path} env:"
-    IO.inspect result
-    
-    {"#{path}", result[:state], result[:data], result[:modules_functions]}
+  defp pre_compile_files(paths) do      
+    Enum.reduce(paths, %{results: [], functions: %{}}, fn path, acc -> 
+      result = FunctionsExtractor.extract_functions_file(path, %{@env | functions: acc[:functions]})
+
+      %{acc | 
+        functions: Map.merge(acc[:functions], result[:functions]), 
+        results: acc[:results] ++ [{"#{path}", result[:state], result[:data]}]}
+    end)
   end
 
-  defp print_state({path, :ok, warnings}) do
-    Enum.each(Map.to_list(warnings), fn warning -> IO.puts "#{IO.ANSI.yellow()}warning:#{IO.ANSI.white()} #{elem(warning, 1)} \n\s\s#{path}:#{elem(warning, 0)}\n" end)
+  defp compile_files(paths, env_functions) do
+    Enum.reduce(paths, [], fn path, acc -> 
+      result = Processor.process_file(path, %{@env | functions: env_functions})
+      acc ++ [{"#{path}", result[:state], result[:data]}]
+    end)
   end
 
   defp print_state({path, :error, error}) do
     IO.puts "#{IO.ANSI.red()}error:#{IO.ANSI.white()} #{elem(error, 1)} \n\s\s#{path}:#{elem(error, 0)}\n"
   end
+
+  defp print_state(_), do: nil
 end
