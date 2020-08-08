@@ -1,17 +1,13 @@
 defmodule Typelixir.Processor do
   @moduledoc false
 
-  alias Typelixir.{PatternBuilder, TypeComparator, PreProcessor, Utils}
+  alias Typelixir.{PatternBuilder, TypeComparator, Utils}
 
   # FIRST
   # ---------------------------------------------------------------------------------------------------
 
   def process_file(path, env) do
     ast = Code.string_to_quoted(File.read!(Path.absname(path)))
-
-    # while developing to see the info in the console
-    IO.puts "#{path} ast:"
-    IO.inspect ast
 
     {_ast, result} = Macro.prewalk(ast, env, &process(&1, &2))
     Utils.prepare_result_data(result)
@@ -140,7 +136,7 @@ defmodule Typelixir.Processor do
             case result[:state] do
               :error -> {elem, result}
               _ ->
-                case TypeComparator.subtype?(result[:type], return_type) do
+                case TypeComparator.supremum(result[:type], return_type) do
                   :error -> Utils.return_error(elem, result, {line, "Body doesn't match function type on #{function_name}/#{params_length} declaration"})
                   _ -> {elem, result}
                 end
@@ -184,18 +180,18 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:*, :+, :-]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, :float, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :integer, false)
   end
 
   defp process({:/, [line: line], [operand1, operand2]}, env) do
     elem = {:/, [line: line], []}
-    binary_operator_process(elem, env, line, :/, operand1, operand2, :integer, :float, false)
+    binary_operator_process(elem, env, line, :/, operand1, operand2, :float, false)
   end
 
   # neg
   defp process({:-, [line: line], [operand]}, env) do
     elem = {:-, [line: line], []}
-    unary_operator_process(elem, env, line, :-, operand, :integer, :float, [:any])
+    unary_operator_process(elem, env, line, :-, operand, :integer)
   end
 
   # BOOLEAN OPERATORS
@@ -203,13 +199,13 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:and, :or]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :boolean, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, false)
   end
 
   # not
   defp process({:not, [line: line], [operand]}, env) do
     elem = {:not, [line: line], []}
-    unary_operator_process(elem, env, line, :not, operand, :boolean, :boolean, [:any])
+    unary_operator_process(elem, env, line, :not, operand, :boolean)
   end
 
   # COMPARISON OPERATORS
@@ -217,7 +213,7 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when (operator in [:==, :!=, :>, :<, :<=, :>=, :===, :!==]) do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, :boolean, :any, true)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, :any, true)
   end
 
   # LIST OPERATORS
@@ -225,7 +221,7 @@ defmodule Typelixir.Processor do
 
   defp process({operator, [line: line], [operand1, operand2]}, env) when operator in [:++, :--] do
     elem = {operator, [line: line], []}
-    binary_operator_process(elem, env, line, operator, operand1, operand2, {:list, :any}, {:list, :any}, false)
+    binary_operator_process(elem, env, line, operator, operand1, operand2, {:list, :any}, false)
   end
 
   # STRING OPERATORS
@@ -233,7 +229,7 @@ defmodule Typelixir.Processor do
 
   defp process({:<>, [line: line], [operand1, operand2]}, env) do
     elem = {:<>, [line: line], []}
-    binary_operator_process(elem, env, line, :<>, operand1, operand2, :string, :string, false)
+    binary_operator_process(elem, env, line, :<>, operand1, operand2, :string, false)
   end
 
   # IF/UNLESS
@@ -248,7 +244,7 @@ defmodule Typelixir.Processor do
     case result_condition[:state] do
       :error -> {elem, result_condition}
       _ ->
-        case TypeComparator.subtype?(result_condition[:type], :boolean) do
+        case TypeComparator.supremum(result_condition[:type], :boolean) do
           :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
           _ -> 
             {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
@@ -271,7 +267,7 @@ defmodule Typelixir.Processor do
     case result_condition[:state] do
       :error -> {elem, result_condition}
       _ ->
-        case TypeComparator.subtype?(result_condition[:type], :boolean) do
+        case TypeComparator.supremum(result_condition[:type], :boolean) do
           :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} condition"})
           _ -> 
             {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
@@ -310,7 +306,7 @@ defmodule Typelixir.Processor do
         case result_condition[:state] do
           :error -> {:halt, {elem, result_condition}}
           _ ->
-            case TypeComparator.subtype?(result_condition[:type], :boolean) do
+            case TypeComparator.supremum(result_condition[:type], :boolean) do
               :error -> {:halt, Utils.return_error(elem, acc_env, {line, "Type error on cond condition"})}
               _ -> 
                 {_ast, result_do_block} = Macro.prewalk(do_block, result_condition, &process(&1, &2))
@@ -458,7 +454,7 @@ defmodule Typelixir.Processor do
 
   defp process([{:|, [line: line], [operand1, operand2]}], env) do
     elem = {:|, [line: line], []}
-    binary_operator_process(elem, env, line, :|, operand1, operand2, {:list, :any}, {:list, :any}, false)
+    binary_operator_process(elem, env, line, :|, operand1, operand2, {:list, :any}, false)
   end
 
   defp process(elem, env) when is_list(elem) do
@@ -517,10 +513,10 @@ defmodule Typelixir.Processor do
           {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
           result = Utils.prepare_result_data(result)
           
-          case TypeComparator.subtype?(result[:type], type) do
-            true -> {:cont, Map.merge(acc_env, result)}
-            _ ->
+          case TypeComparator.supremum(result[:type], type) do
+            :error ->
               {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Arguments does not match type specification on #{fn_name}/#{length(args)}")}}
+            _ -> {:cont, Map.merge(acc_env, result)}
           end
         end)
       
@@ -542,26 +538,22 @@ defmodule Typelixir.Processor do
     end
   end
 
-  defp unary_operator_process(elem, env, line, operator, operand, min_type, max_type, any_type) do
+  defp unary_operator_process(elem, env, line, operator, operand, max_type) do
     {_ast, result} = Macro.prewalk(operand, env, &process(&1, &2))
     result = Utils.prepare_result_data(result)
     
     case result[:state] do
       :error -> {elem, result}
       _ ->
-        case TypeComparator.subtype?(result[:type], max_type) do
+        supremum = TypeComparator.supremum(result[:type], max_type)
+        case supremum do
           :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
-          false -> 
-            cond do
-              result[:type] in any_type -> {elem, %{result | type: min_type}}
-              true -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
-            end
-          true -> {elem, result}
+          _ -> {elem, %{result | type: supremum}}
         end
     end
   end
 
-  defp binary_operator_process(elem, env, line, operator, operand1, operand2, min_type, max_type, is_comparison) do
+  defp binary_operator_process(elem, env, line, operator, operand1, operand2, max_type, is_comparison) do
     {_ast, result_op1} = Macro.prewalk(operand1, env, &process(&1, &2))
     result_op1 = Utils.prepare_result_data(result_op1)
     
@@ -586,15 +578,11 @@ defmodule Typelixir.Processor do
                 
                 cond do
                   TypeComparator.has_type?(type, :error) === true -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
-                  type === :any -> Utils.return_merge_vars(elem, %{result_op1 | type: min_type}, result_op2[:vars])
                   true ->
-                    case TypeComparator.subtype?(type, max_type) do
-                      true -> 
-                        cond do
-                          operator === :/ -> Utils.return_merge_vars(elem, %{result_op1 | type: :float}, result_op2[:vars])
-                          true -> Utils.return_merge_vars(elem, %{result_op1 | type: type}, result_op2[:vars])
-                        end
-                      _ -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
+                    supremum = TypeComparator.supremum(type, max_type)
+                    case supremum do
+                      :error -> Utils.return_error(elem, env, {line, "Type error on #{Atom.to_string(operator)} operator"})
+                      _ -> Utils.return_merge_vars(elem, %{result_op1 | type: supremum}, result_op2[:vars])
                     end
                 end
             end
@@ -617,9 +605,9 @@ defmodule Typelixir.Processor do
           _ -> 
             case result_map[:type] do
               {:map, {key_type, _value_types}} ->
-                case TypeComparator.subtype?(result_key[:type], key_type) do
-                  true -> Utils.return_merge_vars(elem, %{result_map | type: :any}, result_key[:vars])
-                  _ -> Utils.return_error(elem, env, {line, "Expected #{key_type} as key instead of #{result_key[:type]}"})
+                case TypeComparator.supremum(result_key[:type], key_type) do
+                  :error -> Utils.return_error(elem, env, {line, "Expected #{key_type} as key instead of #{result_key[:type]}"})
+                  _ -> Utils.return_merge_vars(elem, %{result_map | type: :any}, result_key[:vars])
                 end
               _ -> Utils.return_error(elem, env, {line, "Not accessing to a map"})
             end
