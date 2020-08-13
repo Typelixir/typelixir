@@ -85,13 +85,14 @@ defmodule Typelixir.FunctionsExtractorTest do
           @spec example2() :: integer
           @spec example3(integer) :: any
           @spec example4([integer], {float, string}, %{none => float}) :: {float, string}
+          @spec example5 :: integer
         end
       ")
       assert FunctionsExtractor.extract_functions_file("#{@test_dir}/example.ex", @env) 
         === %{
           error_data: %{}, 
           functions: %{
-            "Example" => %{{:example, 2} => {:float, [:integer, :boolean]}, {:example2, 0} => {:integer, []}, {:example3, 1} => {:any, [:integer]}, {:example4, 3} => {{:tuple, [:float, :string]}, [list: :integer, tuple: [:float, :string], map: {:none, [:float]}]}}, 
+            "Example" => %{{:example, 2} => {:float, [:integer, :boolean]}, {:example2, 0} => {:integer, []}, {:example3, 1} => {:any, [:integer]}, {:example4, 3} => {{:tuple, [:float, :string]}, [list: :integer, tuple: [:float, :string], map: {:none, [:float]}]}, {:example5, 0} => {:integer, []}}, 
             "ModuleA.ModuleB" => %{{:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]}, {:test2, 0} => {:any, []}, {:test3, 1} => {:any, [:integer]}, {:test3, 2} => {:string, [:integer, :string]}}, 
             "ModuleThree" => %{{:test, 2} => {:string, [:integer, :string]}}
           }, 
