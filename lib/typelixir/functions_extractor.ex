@@ -34,7 +34,7 @@ defmodule Typelixir.FunctionsExtractor do
   # ---------------------------------------------------------------------------------------------------
 
   defp extract({:@, [line: line], [{:spec, _, [{:::, _, [{fn_name, _, type_of_args}, type_of_return]}]}]} = elem, env) do
-    type_of_args = Enum.map(type_of_args, fn type -> PatternBuilder.type(type, %{}) end)
+    type_of_args = Enum.map(type_of_args || [], fn type -> PatternBuilder.type(type, %{}) end)
     fn_type = {PatternBuilder.type(type_of_return, %{}), type_of_args}
     fn_key = {fn_name, length(type_of_args)}
 
