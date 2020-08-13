@@ -208,6 +208,35 @@ defmodule Typelixir.ProcessorTest do
           :data => {4, "Parameters does not match type specification"},
           :vars => %{}
         }
+
+      # empty params
+      File.write("test/tmp/example.ex", "
+        defmodule Example do
+          @spec test(integer) :: integer
+          defp test(x), do: 11
+
+          @spec test2 :: integer
+          def test2, do: 11
+        end
+      ")
+
+      assert Processor.process_file("#{@test_dir}/example.ex", %{@env | functions: Map.put(@env[:functions], "Example", %{
+        {:test, 1} => {:integer, [:integer]},
+        {:test2, 0} => {:any, [:integer]}
+      })}) 
+        === %{
+          :functions => %{
+            "Example" => %{{:test, 1} => {:integer, [:integer]}, {:test2, 0} => {:any, [:integer]}},
+            "ModuleA.ModuleB" => %{{:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]}, {:test2, 0} => {:any, []}},
+            "ModuleC" => %{{:test, 2} => {:string, [:integer, :string]}}
+          },
+          :prefix => "Example",
+          :type => {:list, {:tuple, [:atom, :any]}},
+          :state => :ok,
+          :error_data => %{},
+          :data => %{},
+          :vars => %{}
+        }
     end
 
     test "functions call" do

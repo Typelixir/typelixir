@@ -113,7 +113,7 @@ defmodule Typelixir.Processor do
   defp process({defs, [line: line], [{function_name, _meta, params}, [do: block]]}, env) when (defs in [:def, :defp]) do
     elem = {defs, [line: line], []}
     
-    params_length = length(params)
+    params_length = length(params || [])
     fn_key = {function_name, params_length}
 
     case env[:functions][env[:prefix]][fn_key] do
@@ -125,7 +125,7 @@ defmodule Typelixir.Processor do
       _ -> 
         return_type = env[:functions][env[:prefix]][fn_key] |> elem(0)
         param_type_list = env[:functions][env[:prefix]][fn_key] |> elem(1)
-        params_vars = PatternBuilder.vars(params, param_type_list)
+        params_vars = PatternBuilder.vars(params || [], param_type_list)
 
         case params_vars do
           {:error, msg} -> Utils.return_error(elem, env, {line, msg})
