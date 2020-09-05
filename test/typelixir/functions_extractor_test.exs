@@ -149,5 +149,45 @@ defmodule Typelixir.FunctionsExtractorTest do
           vars: %{}
       }
     end
+
+    test "returns error when there are malformed type specs" do
+      File.write("test/tmp/example.ex", "
+        defmodule Example do
+          @spec example(%{integer => atom, boolean => integer}) :: float
+        end
+      ")
+      assert FunctionsExtractor.extract_functions_file("#{@test_dir}/example.ex", @env) 
+        === %{
+          prefix: nil, 
+          error_data: %{3 => "Malformed type spec on example/1 parameters"}, 
+          functions: %{
+            "ModuleA.ModuleB" => %{{:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]}, {:test2, 0} => {:any, []}, {:test3, 1} => {:any, [:integer]}, {:test3, 2} => {:string, [:integer, :string]}}, 
+            "ModuleThree" => %{{:test, 2} => {:string, [:integer, :string]}}, 
+            "Example" => %{}
+          }, 
+          state: :error,
+          data: {3, "Malformed type spec on example/1 parameters"},
+          vars: %{}
+      }
+
+      File.write("test/tmp/example.ex", "
+        defmodule Example do
+          @spec example(float) :: [integer, string]
+        end
+      ")
+      assert FunctionsExtractor.extract_functions_file("#{@test_dir}/example.ex", @env) 
+        === %{
+          prefix: nil, 
+          error_data: %{3 => "Malformed type spec on example/1 return"}, 
+          functions: %{
+            "ModuleA.ModuleB" => %{{:test, 2} => {{:tuple, [{:list, :integer}, :string]}, [{:list, :integer}, :string]}, {:test2, 0} => {:any, []}, {:test3, 1} => {:any, [:integer]}, {:test3, 2} => {:string, [:integer, :string]}}, 
+            "ModuleThree" => %{{:test, 2} => {:string, [:integer, :string]}}, 
+            "Example" => %{}
+          }, 
+          state: :error,
+          data: {3, "Malformed type spec on example/1 return"},
+          vars: %{}
+      }
+    end
   end
 end
