@@ -1,7 +1,7 @@
 defmodule Typelixir.FunctionsExtractor do
   @moduledoc false
 
-  alias Typelixir.{PatternBuilder, Utils}
+  alias Typelixir.{PatternBuilder, TypeComparator, Utils}
 
   # extends the given functions env map with the module name and the functions it defines
 
@@ -35,17 +35,28 @@ defmodule Typelixir.FunctionsExtractor do
 
   defp extract({:@, [line: line], [{:spec, _, [{:::, _, [{fn_name, _, type_of_args}, type_of_return]}]}]} = elem, env) do
     type_of_args = Enum.map(type_of_args || [], fn type -> PatternBuilder.type(type, %{}) end)
-    fn_type = {PatternBuilder.type(type_of_return, %{}), type_of_args}
-    fn_key = {fn_name, length(type_of_args)}
 
-    case (env[:functions][env[:prefix]][fn_key]) do
-      nil ->
-        new_module_map = Map.put(env[:functions][env[:prefix]], {fn_name, length(type_of_args)}, fn_type)
-        new_functions = Map.put(env[:functions], env[:prefix], new_module_map)
-      
-        {elem, %{env | functions: new_functions}}
-      _ -> 
-        {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "#{fn_name}/#{length(type_of_args)} already has a defined type")}}
+    case TypeComparator.has_type?(type_of_args, :error) do
+      true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Malformed type spec on #{fn_name}/#{length(type_of_args)} parameters")}}
+      _ ->
+        return_type = PatternBuilder.type(type_of_return, %{})
+
+        case TypeComparator.has_type?(return_type, :error) do
+          true -> {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "Malformed type spec on #{fn_name}/#{length(type_of_args)} return")}}
+          _ -> 
+            fn_type = {return_type, type_of_args}
+            fn_key = {fn_name, length(type_of_args)}
+
+            case (env[:functions][env[:prefix]][fn_key]) do
+              nil ->
+                new_module_map = Map.put(env[:functions][env[:prefix]], {fn_name, length(type_of_args)}, fn_type)
+                new_functions = Map.put(env[:functions], env[:prefix], new_module_map)
+              
+                {elem, %{env | functions: new_functions}}
+              _ -> 
+                {elem, %{env | state: :error, error_data: Map.put(env[:error_data], line, "#{fn_name}/#{length(type_of_args)} already has a defined type")}}
+            end
+        end
     end
   end
 
