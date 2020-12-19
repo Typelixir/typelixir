@@ -102,7 +102,13 @@ defmodule Typelixir.PatternBuilder do
 
   defp get_vars([], {:list, _type}), do: []
 
-  defp get_vars(op, {:list, type}) when is_list(op), do: Enum.map(op, fn x -> get_vars(x, type) end)
+  defp get_vars(op, {:list, type}) when is_list(op) do 
+    Enum.map(op, fn x -> 
+      # IO.inspect x
+      # IO.inspect type
+      get_vars(x, {:list, type})
+    end)
+  end
 
   defp get_vars({:|, _, [operand1, operand2]}, {:list, type}),
     do: [get_vars(operand1, type), get_vars(operand2, {:list, type})]

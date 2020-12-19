@@ -9,6 +9,8 @@ defmodule Typelixir.Processor do
   def process_file(path, env) do
     ast = Code.string_to_quoted(File.read!(Path.absname(path)))
 
+    # IO.inspect env
+
     {_ast, result} = Macro.prewalk(ast, env, &process(&1, &2))
     Utils.prepare_result_data(result)
   end
@@ -505,6 +507,8 @@ defmodule Typelixir.Processor do
         |> Enum.join(".")
     spec_type = env[:functions][mod_name][{fn_name, length(args)}]
 
+    # IO.inspect spec_type
+
     if (spec_type) do
       {result_type, type_args} = spec_type
 
@@ -512,12 +516,16 @@ defmodule Typelixir.Processor do
         fn {arg, type}, acc_env ->
           {_ast, result} = Macro.prewalk(arg, acc_env, &process(&1, &2))
           result = Utils.prepare_result_data(result)
-          
-          case TypeComparator.supremum(result[:type], type) do
-            :error ->
+
+          # IO.inspect result[:type]
+          # IO.inspect type
+          # IO.inspect TypeComparator.supremum(result[:type], type)
+
+          cond do
+            TypeComparator.has_type?(TypeComparator.supremum(result[:type], type), :error) === true ->
               {:halt, %{acc_env | state: :error, error_data: Map.put(acc_env[:error_data], line, "Arguments does not match type specification on #{fn_name}/#{length(args)}")}}
-            _ -> {:cont, Map.merge(acc_env, result)}
-          end
+            true -> {:cont, Map.merge(acc_env, result)}
+            end
         end)
       
       case args_check[:state] do
@@ -569,6 +577,7 @@ defmodule Typelixir.Processor do
             cond do
               is_comparison -> Utils.return_merge_vars(elem, %{result_op1 | type: :boolean}, result_op2[:vars])
               true ->
+                # IO.inspect operator
                 type = 
                   cond do
                     operator === :| and is_tuple(result_op2[:type]) -> TypeComparator.supremum({:list, result_op1[:type]}, result_op2[:type])
